@@ -35,6 +35,7 @@ FIELD = {
         "aggregate": {"enum": ["", "COUNT", "SUM", "AVG", "MIN", "MAX"]},
         "distinct": {"type": "boolean"},
         "date_part": {"enum": ["day", "month", "year"]},
+        "coalesce": {"type": "number"},
     },
     "anyOf": [{"required": ["table", "column"]}, {"required": ["expression", "alias"]}],
     "additionalProperties": False,

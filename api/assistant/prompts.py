@@ -76,19 +76,27 @@ Each item has multiple stock records across warehouses and batches. ALWAYS aggre
 - In select: ALWAYS select inventory_items.name (alias="item_name"), inventory_items.sku (alias="sku"), inventory_items.id (alias="item_id"), and inventory_stock_balances.qty_on_hand with aggregate="SUM", alias="quantity".
 - In group_by: include all selected non-aggregate fields from inventory_items (name, sku, id, and status if selected).
 Never select raw inventory_stock_balances.qty_on_hand without aggregate="SUM" and group_by.
-When querying items whose stock quantity is lesser than or below their item master minimum quantity (min_stock_level) or replenishment rules:
+When querying items whose stock quantity is lesser than or below their item master minimum quantity (min_stock_level), low stock, or replenishment rules:
 Formulate a direct query plan on inventory replenishment rules:
 - base_table: 'inventory_items'
-- select: inventory_items.id (alias='item_id'), inventory_items.sku (alias='sku'), inventory_items.name (alias='item_name'), inventory_item_replenishment_rules.min_stock_level (alias='minimum_quantity'), inventory_stock_balances.qty_available with aggregate='SUM', alias='stock_quantity', inventory_stock_balances.qty_on_hand with aggregate='SUM', alias='qty_on_hand'
+- select: [
+    {'table': 'inventory_items', 'column': 'id', 'alias': 'item_id'},
+    {'table': 'inventory_items', 'column': 'sku', 'alias': 'sku'},
+    {'table': 'inventory_items', 'column': 'name', 'alias': 'item_name'},
+    {'table': 'inventory_item_replenishment_rules', 'column': 'min_stock_level', 'alias': 'minimum_quantity'},
+    {'table': 'inventory_stock_balances', 'column': 'qty_available', 'aggregate': 'SUM', 'alias': 'stock_quantity'},
+    {'table': 'inventory_stock_balances', 'column': 'qty_on_hand', 'aggregate': 'SUM', 'alias': 'qty_on_hand'}
+  ]
 - joins: [
     LEFT JOIN inventory_item_replenishment_rules ON inventory_item_replenishment_rules.item_id = inventory_items.id,
     LEFT JOIN inventory_stock_balances ON inventory_stock_balances.item_id = inventory_items.id
   ]
-- filters: [inventory_item_replenishment_rules.min_stock_level IS NOT NULL, inventory_items.deleted_at IS NULL]
+- filters: [inventory_items.deleted_at IS NULL]
 - group_by: [inventory_items.id, inventory_items.sku, inventory_items.name, inventory_item_replenishment_rules.min_stock_level]
 - having: [{'alias': 'stock_quantity', 'operator': '<', 'value': {'alias': 'minimum_quantity'}}]
 - order_by: [alias='stock_quantity', direction='asc']
 - limit: 50
+Do NOT filter 'min_stock_level IS NOT NULL' so items with stock below their minimum (including the standard 0 minimum baseline) are naturally captured.
 
 When querying out of stock, zero stock, depleted stock, or negative stock items:
 Formulate a query plan on inventory stock balances:
