@@ -1,0 +1,158 @@
+[
+  {
+    "id": "PRICE-TYPO-FOLLOWUP",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "list down the items which are gratre than 1000",
+        "expected_status": "needs_clarification",
+        "no_live_tools": true,
+        "contains": [
+          "selling price"
+        ]
+      },
+      {
+        "question": "selling p[rice",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,v.id variant_id,v.sku variant_sku,v.variant_name,v.status variant_status,v.sale_price FROM inventory_item_variants v JOIN inventory_items i ON i.id=v.item_id WHERE i.deleted_at IS NULL AND v.deleted_at IS NULL AND v.sale_price>1000 ORDER BY i.id,v.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,b.id batch_id,b.batch_number,b.variant_id,b.selling_price FROM inventory_batches b JOIN inventory_items i ON i.id=b.item_id WHERE i.deleted_at IS NULL AND b.selling_price>1000 ORDER BY i.id,b.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "excludes": [
+          "min_stock_level",
+          "max_stock_level",
+          "which selling price",
+          "Remaining scope:"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "PRICE-DIRECT",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List items with selling price greater than 1000.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,v.id variant_id,v.sku variant_sku,v.variant_name,v.status variant_status,v.sale_price FROM inventory_item_variants v JOIN inventory_items i ON i.id=v.item_id WHERE i.deleted_at IS NULL AND v.deleted_at IS NULL AND v.sale_price>1000 ORDER BY i.id,v.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,b.id batch_id,b.batch_number,b.variant_id,b.selling_price FROM inventory_batches b JOIN inventory_items i ON i.id=b.item_id WHERE i.deleted_at IS NULL AND b.selling_price>1000 ORDER BY i.id,b.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "excludes": [
+          "min_stock_level",
+          "max_stock_level",
+          "which selling price",
+          "Remaining scope:"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "PRICE-DIRECTION",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List items with selling price at most 1000.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,v.id variant_id,v.sku variant_sku,v.variant_name,v.status variant_status,v.sale_price FROM inventory_item_variants v JOIN inventory_items i ON i.id=v.item_id WHERE i.deleted_at IS NULL AND v.deleted_at IS NULL AND v.sale_price<=1000 ORDER BY i.id,v.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,b.id batch_id,b.batch_number,b.variant_id,b.selling_price FROM inventory_batches b JOIN inventory_items i ON i.id=b.item_id WHERE i.deleted_at IS NULL AND b.selling_price<=1000 ORDER BY i.id,b.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "excludes": [
+          "min_stock_level",
+          "max_stock_level",
+          "which selling price",
+          "Remaining scope:"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "PRICE-VARIANT",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List items with variant selling price greater than 1000.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,v.id variant_id,v.sku variant_sku,v.variant_name,v.status variant_status,v.sale_price FROM inventory_item_variants v JOIN inventory_items i ON i.id=v.item_id WHERE i.deleted_at IS NULL AND v.deleted_at IS NULL AND v.sale_price>1000 ORDER BY i.id,v.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "excludes": [
+          "min_stock_level",
+          "max_stock_level",
+          "which selling price",
+          "Remaining scope:"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "PRICE-BATCH",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List items with batch selling price greater than 1000.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id item_id,i.sku,i.name,i.status item_status,b.id batch_id,b.batch_number,b.variant_id,b.selling_price FROM inventory_batches b JOIN inventory_items i ON i.id=b.item_id WHERE i.deleted_at IS NULL AND b.selling_price>1000 ORDER BY i.id,b.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "excludes": [
+          "min_stock_level",
+          "max_stock_level",
+          "which selling price",
+          "Remaining scope:"
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,198 @@
+[
+  {
+    "id": "fixture_payroll_net",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "What is the total net payroll for approved payroll run ID 7 in organization ID 22?",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "144.?000"
+        ],
+        "scalar_snapshot": {
+          "sql": "SELECT total_net FROM hr_payroll_runs WHERE id=7",
+          "tables": [
+            "hr_payroll_runs"
+          ],
+          "column": "total_net"
+        },
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_payroll_lines",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "For payroll run ID 7, show employee line gross, deductions and net pay, and reconcile the run total.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "100.?000",
+          "60.?000",
+          "144.?000"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_payroll_draft",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "Is payroll run ID 8 paid or approved? Check its actual state.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "draft"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_payroll_attendance",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "How many attendance days with status P were recorded for employee ID 11 in September 2026?",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "18"
+        ],
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) FROM hr_attendance_days WHERE employee_id=11 AND work_date >= '2026-09-01' AND work_date < '2026-10-01' AND status='P'",
+          "tables": [
+            "hr_attendance_days"
+          ]
+        },
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_bom_components",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "Show the Phantom BOM for SKU AN-QA-KIT and each component quantity.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "AN-QA-PART-A|QA Analytics PART-A",
+          "AN-QA-PART-B|QA Analytics PART-B",
+          "2",
+          "1"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_bom_requirements",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "What component quantities are required for 5 units of SKU AN-QA-KIT?",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "10",
+          "5",
+          "AN-QA-PART-A|QA Analytics PART-A"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_bom_shortage",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "For 5 units of SKU AN-QA-KIT, compare component requirements with available stock at warehouse ID 20. Show the shortage per component.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "10",
+          "9",
+          "short",
+          "1",
+          "5"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_bom_inactive",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "Show duplicate component lines and inactive components in the BOM of SKU AN-QA-EXCEPTION-KIT.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "duplicat",
+          "inactive"
+        ],
+        "capture_result": true
+      }
+    ]
+  },
+  {
+    "id": "fixture_bom_no_production",
+    "area": "payroll_bom_fixture",
+    "turns": [
+      {
+        "question": "Does the Phantom BOM for SKU AN-QA-KIT prove that 5 kits were produced and stock was consumed? Check actual recorded evidence.",
+        "tools_any": [
+          "query_business_data",
+          "get_item_stock_and_rules",
+          "analyze_phantom_bom"
+        ],
+        "evidence": true,
+        "contains": [
+          "not|no|doesn.t|cannot|can.t"
+        ],
+        "capture_result": true
+      }
+    ]
+  }
+]

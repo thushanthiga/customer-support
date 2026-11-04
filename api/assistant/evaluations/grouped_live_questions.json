@@ -1,0 +1,268 @@
+[
+  {
+    "id": "group_core_parties",
+    "area": "core",
+    "turns": [
+      {
+        "question": "Count core parties grouped by type. Return those grouping fields, the count in each group. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `type`, COUNT(*) AS record_count FROM `core_parties` WHERE deleted_at IS NULL GROUP BY `type`",
+          "tables": [
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_sales_orders",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "Count sales orders grouped by status, organization_id. Return those grouping fields, the count in each group, and the SUM of grand_total. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `status`, `organization_id`, COUNT(*) AS record_count, SUM(`grand_total`) AS `grand_total_total` FROM `sales_orders` WHERE deleted_at IS NULL GROUP BY `status`, `organization_id`",
+          "tables": [
+            "sales_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_inventory_stock_balances",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "Count inventory stock balances grouped by warehouse_id. Return those grouping fields, the count in each group, and the SUM of qty_available, qty_on_hand. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `warehouse_id`, COUNT(*) AS record_count, SUM(`qty_available`) AS `qty_available_total`, SUM(`qty_on_hand`) AS `qty_on_hand_total` FROM `inventory_stock_balances` GROUP BY `warehouse_id`",
+          "tables": [
+            "inventory_stock_balances"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_procurement_goods_receipt_notes",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "Count procurement goods receipt notes grouped by currency_id, status. Return those grouping fields, the count in each group, and the SUM of grand_total. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `currency_id`, `status`, COUNT(*) AS record_count, SUM(`grand_total`) AS `grand_total_total` FROM `procurement_goods_receipt_notes` GROUP BY `currency_id`, `status`",
+          "tables": [
+            "procurement_goods_receipt_notes"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_finance_invoices",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "Count finance invoices grouped by type, currency_id. Return those grouping fields, the count in each group, and the SUM of amount_due, amount_settled. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `type`, `currency_id`, COUNT(*) AS record_count, SUM(`amount_due`) AS `amount_due_total`, SUM(`amount_settled`) AS `amount_settled_total` FROM `finance_invoices` GROUP BY `type`, `currency_id`",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_crm_leads",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "Count crm leads grouped by crm_status_id. Return those grouping fields, the count in each group. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `crm_status_id`, COUNT(*) AS record_count FROM `crm_leads` WHERE deleted_at IS NULL GROUP BY `crm_status_id`",
+          "tables": [
+            "crm_leads"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_hr_attendance_days",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "Count hr attendance days grouped by status. Return those grouping fields, the count in each group, and the SUM of worked_minutes, ot_minutes. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `status`, COUNT(*) AS record_count, SUM(`worked_minutes`) AS `worked_minutes_total`, SUM(`ot_minutes`) AS `ot_minutes_total` FROM `hr_attendance_days` GROUP BY `status`",
+          "tables": [
+            "hr_attendance_days"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_construction_projects",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "Count construction projects grouped by currency, status. Return those grouping fields, the count in each group, and the SUM of contract_value. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `currency`, `status`, COUNT(*) AS record_count, SUM(`contract_value`) AS `contract_value_total` FROM `construction_projects` WHERE deleted_at IS NULL GROUP BY `currency`, `status`",
+          "tables": [
+            "construction_projects"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_jewelry_sales",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "Count jewelry sales grouped by organization_id, status. Return those grouping fields, the count in each group, and the SUM of grand_total. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Report stored grand totals per organization; no currency conversion is requested.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `organization_id`, `status`, COUNT(*) AS record_count, SUM(`grand_total`) AS `grand_total_total` FROM `jewelry_sales` WHERE deleted_at IS NULL GROUP BY `organization_id`, `status`",
+          "tables": [
+            "jewelry_sales"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_money_exchange_transactions",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "Count money exchange transactions grouped by from_currency_code, to_currency_code, type. Return those grouping fields, the count in each group, and the SUM of total_incoming_amount, total_payout_amount. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `from_currency_code`, `to_currency_code`, `type`, COUNT(*) AS record_count, SUM(`total_incoming_amount`) AS `total_incoming_amount_total`, SUM(`total_payout_amount`) AS `total_payout_amount_total` FROM `money_exchange_transactions` WHERE deleted_at IS NULL GROUP BY `from_currency_code`, `to_currency_code`, `type`",
+          "tables": [
+            "money_exchange_transactions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_production_phantom_bom_materials",
+    "area": "production",
+    "turns": [
+      {
+        "question": "Count production phantom bom materials grouped by phantom_bom_id, uom_id. Return those grouping fields, the count in each group, and the SUM of quantity. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `phantom_bom_id`, `uom_id`, COUNT(*) AS record_count, SUM(`quantity`) AS `quantity_total` FROM `production_phantom_bom_materials` WHERE deleted_at IS NULL GROUP BY `phantom_bom_id`, `uom_id`",
+          "tables": [
+            "production_phantom_bom_materials"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_report_definitions",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "Count report definitions grouped by module, is_active. Return those grouping fields, the count in each group. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `module`, `is_active`, COUNT(*) AS record_count FROM `report_definitions` GROUP BY `module`, `is_active`",
+          "tables": [
+            "report_definitions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_construction_project_boqs",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "Count construction project boqs grouped by project_id, unit. Return those grouping fields, the count in each group, and the SUM of estimated_qty, actual_qty. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `project_id`, `unit`, COUNT(*) AS record_count, SUM(`estimated_qty`) AS `estimated_qty_total`, SUM(`actual_qty`) AS `actual_qty_total` FROM `construction_project_boqs` WHERE deleted_at IS NULL GROUP BY `project_id`, `unit`",
+          "tables": [
+            "construction_project_boqs"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "group_finance_payments",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "Count finance payments grouped by currency_id, direction. Return those grouping fields, the count in each group, and the SUM of payment_amount. Include all statuses and organizations and exclude soft-deleted source rows where supported. Do not join other tables. Keep currencies and units in separate groups; report recorded amounts without conversion.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "row_snapshot": {
+          "sql": "SELECT `currency_id`, `direction`, COUNT(*) AS record_count, SUM(`payment_amount`) AS `payment_amount_total` FROM `finance_payments` GROUP BY `currency_id`, `direction`",
+          "tables": [
+            "finance_payments"
+          ]
+        }
+      }
+    ]
+  }
+]

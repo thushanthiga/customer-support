@@ -1,0 +1,1571 @@
+[
+  {
+    "id": "module_core_organizations",
+    "area": "core",
+    "turns": [
+      {
+        "question": "How many core organizations are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `core_organizations` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "core_organizations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_core_parties",
+    "area": "core",
+    "turns": [
+      {
+        "question": "How many core party records (all party types) are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `core_parties` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_core_approval_requests",
+    "area": "core",
+    "turns": [
+      {
+        "question": "How many core approval requests are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `core_approval_requests` WHERE 1=1",
+          "tables": [
+            "core_approval_requests"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_core_roles",
+    "area": "core",
+    "turns": [
+      {
+        "question": "How many core roles are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `core_roles` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "core_roles"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_sales_orders",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many sales orders are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_orders` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "sales_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_sales_quotations",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many sales quotations are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_quotations` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "sales_quotations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_sales_pos",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many POS sales are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_pos` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "sales_pos"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_sales_returns",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many sales returns are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_returns` WHERE 1=1",
+          "tables": [
+            "sales_returns"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_sales_pos_terminal_sessions",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many POS terminal sessions are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_pos_terminal_sessions` WHERE 1=1",
+          "tables": [
+            "sales_pos_terminal_sessions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_inventory_items",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "How many inventory items are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `inventory_items` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_inventory_item_variants",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "How many inventory item variants are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `inventory_item_variants` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "inventory_item_variants"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_inventory_serial_numbers",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "How many registered inventory serial number records are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `inventory_serial_numbers` WHERE 1=1",
+          "tables": [
+            "inventory_serial_numbers"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_inventory_stock_transfers",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "How many inventory stock transfers are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `inventory_stock_transfers` WHERE 1=1",
+          "tables": [
+            "inventory_stock_transfers"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_procurement_purchase_orders",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "How many procurement purchase orders are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_purchase_orders` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "procurement_purchase_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_procurement_goods_receipt_notes",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "How many procurement goods receipt notes are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_goods_receipt_notes` WHERE 1=1",
+          "tables": [
+            "procurement_goods_receipt_notes"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_procurement_purchase_order_lines",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "How many procurement purchase order lines are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_purchase_order_lines` WHERE 1=1",
+          "tables": [
+            "procurement_purchase_order_lines"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_finance_invoices",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "How many finance invoices are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_invoices` WHERE 1=1",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_finance_payments",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "How many finance payments are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_payments` WHERE 1=1",
+          "tables": [
+            "finance_payments"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_finance_bank_accounts",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "How many finance bank accounts are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_bank_accounts` WHERE 1=1",
+          "tables": [
+            "finance_bank_accounts"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_fin_journal_entries",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "How many finance journal entries are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `fin_journal_entries` WHERE 1=1",
+          "tables": [
+            "fin_journal_entries"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_finance_bank_transactions",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "How many finance bank transactions are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_bank_transactions` WHERE 1=1",
+          "tables": [
+            "finance_bank_transactions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_crm_leads",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "How many crm leads are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_leads` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "crm_leads"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_crm_confirmed_sales",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "How many crm confirmed sales are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_confirmed_sales` WHERE 1=1",
+          "tables": [
+            "crm_confirmed_sales"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_crm_quotations",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "How many crm quotations are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_quotations` WHERE 1=1",
+          "tables": [
+            "crm_quotations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_crm_spaces",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "How many crm spaces are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_spaces` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "crm_spaces"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_crm_lead_tasks",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "How many crm lead tasks are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_lead_tasks` WHERE 1=1",
+          "tables": [
+            "crm_lead_tasks"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_hr_employees",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "How many hr employees are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_employees` WHERE 1=1",
+          "tables": [
+            "hr_employees"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_hr_leave_applications",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "How many hr leave applications are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_leave_applications` WHERE 1=1",
+          "tables": [
+            "hr_leave_applications"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_hr_attendance_days",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "How many HR attendance day records are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_attendance_days` WHERE 1=1",
+          "tables": [
+            "hr_attendance_days"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_hr_payroll_runs",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "How many hr payroll runs are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_payroll_runs` WHERE 1=1",
+          "tables": [
+            "hr_payroll_runs"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_hr_rosters",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "How many hr rosters are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_rosters` WHERE 1=1",
+          "tables": [
+            "hr_rosters"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_construction_projects",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "How many construction projects are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_projects` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "construction_projects"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_construction_project_boqs",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "How many construction project BOQs are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_project_boqs` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "construction_project_boqs"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_construction_change_orders",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "How many construction change orders are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_change_orders` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "construction_change_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_construction_ipcs",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "How many construction IPCs are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_ipcs` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "construction_ipcs"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_construction_equipment_allocations",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "How many construction equipment allocations are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_equipment_allocations` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "construction_equipment_allocations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_jewelry_items",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "How many jewelry items are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_items` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "jewelry_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_jewelry_sales",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "How many jewelry sales are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_sales` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "jewelry_sales"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_jewelry_custom_orders",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "How many jewelry custom orders are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_custom_orders` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "jewelry_custom_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_jewelry_karigar_orders",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "How many jewelry karigar orders are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_karigar_orders` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "jewelry_karigar_orders"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_jewelry_metal_settlements",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "How many jewelry metal settlements are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_metal_settlements` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "jewelry_metal_settlements"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_money_exchange_transactions",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "How many money exchange transactions are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_transactions` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "money_exchange_transactions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_money_exchange_till_operations",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "How many money exchange till operations are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_till_operations` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "money_exchange_till_operations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_money_exchange_internal_transfers",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "How many money exchange internal transfers are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_internal_transfers` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "money_exchange_internal_transfers"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_money_exchange_currency_rates",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "How many money exchange currency rates are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_currency_rates` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "money_exchange_currency_rates"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_production_phantom_boms",
+    "area": "production",
+    "turns": [
+      {
+        "question": "How many production Phantom BOMs are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `production_phantom_boms` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "production_phantom_boms"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_production_phantom_bom_materials",
+    "area": "production",
+    "turns": [
+      {
+        "question": "How many production Phantom BOM material lines are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `production_phantom_bom_materials` WHERE `deleted_at` IS NULL",
+          "tables": [
+            "production_phantom_bom_materials"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_report_definitions",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "How many saved report definitions are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `report_definitions` WHERE 1=1",
+          "tables": [
+            "report_definitions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_dashboards",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "How many saved dashboards are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `dashboards` WHERE 1=1",
+          "tables": [
+            "dashboards"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_dashboard_tiles",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "How many dashboard tiles are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `dashboard_tiles` WHERE 1=1",
+          "tables": [
+            "dashboard_tiles"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "module_report_filters",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "How many saved report filters are recorded? Include all statuses and organizations, exclude soft-deleted records. Return only the total count and its scope.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `report_filters` WHERE 1=1",
+          "tables": [
+            "report_filters"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_01_sales_pos",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many POS sales reference an existing finance invoices record through invoice_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_pos` a INNER JOIN `finance_invoices` b ON a.`invoice_id`=b.`id` WHERE a.`deleted_at` IS NULL AND 1=1",
+          "tables": [
+            "sales_pos",
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_02_sales_order_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many sales order lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_order_lines` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "sales_order_lines",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_03_sales_quotation_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many sales quotation lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_quotation_lines` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "sales_quotation_lines",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_04_sales_goods_issue_note_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many sales goods issue note lines reference an existing registered inventory serial number records record through serial_number_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_goods_issue_note_lines` a INNER JOIN `inventory_serial_numbers` b ON a.`serial_number_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "sales_goods_issue_note_lines",
+            "inventory_serial_numbers"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_05_sales_return_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many sales return lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_return_lines` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "sales_return_lines",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_06_procurement_purchase_order_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many procurement purchase order lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_purchase_order_lines` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "procurement_purchase_order_lines",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_07_procurement_goods_receipt_note_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many procurement goods receipt note lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_goods_receipt_note_lines` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "procurement_goods_receipt_note_lines",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_08_procurement_goods_receipt_note_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many procurement goods receipt note lines reference an existing registered inventory serial number records record through serial_number_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_goods_receipt_note_lines` a INNER JOIN `inventory_serial_numbers` b ON a.`serial_number_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "procurement_goods_receipt_note_lines",
+            "inventory_serial_numbers"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_09_production_phantom_boms",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many production Phantom BOMs reference an existing inventory items record through finished_good_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `production_phantom_boms` a INNER JOIN `inventory_items` b ON a.`finished_good_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "production_phantom_boms",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_10_production_phantom_bom_materials",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many production Phantom BOM material lines reference an existing inventory items record through item_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `production_phantom_bom_materials` a INNER JOIN `inventory_items` b ON a.`item_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "production_phantom_bom_materials",
+            "inventory_items"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_11_production_phantom_bom_materials",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many production Phantom BOM material lines reference an existing inventory units of measure record through uom_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `production_phantom_bom_materials` a INNER JOIN `inventory_units_of_measure` b ON a.`uom_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "production_phantom_bom_materials",
+            "inventory_units_of_measure"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_12_construction_attendance_projects",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many construction attendance projects reference an existing HR attendance day records record through hr_attendance_day_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_attendance_projects` a INNER JOIN `hr_attendance_days` b ON a.`hr_attendance_day_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "construction_attendance_projects",
+            "hr_attendance_days"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_13_jewelry_goods_receipt_notes",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many jewelry goods receipt notes reference an existing finance invoices record through invoice_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_goods_receipt_notes` a INNER JOIN `finance_invoices` b ON a.`invoice_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "jewelry_goods_receipt_notes",
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_14_jewelry_karigar_transactions",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many jewelry karigar transactions reference an existing finance invoices record through invoice_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_karigar_transactions` a INNER JOIN `finance_invoices` b ON a.`invoice_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "jewelry_karigar_transactions",
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_15_jewelry_metal_settlements",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many jewelry metal settlements reference an existing finance invoices record through invoice_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_metal_settlements` a INNER JOIN `finance_invoices` b ON a.`invoice_id`=b.`id` WHERE a.`deleted_at` IS NULL AND 1=1",
+          "tables": [
+            "jewelry_metal_settlements",
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_16_money_exchange_wholesale_orders",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many money exchange wholesale orders reference an existing finance bank accounts record through bank_account_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_wholesale_orders` a INNER JOIN `finance_bank_accounts` b ON a.`bank_account_id`=b.`id` WHERE a.`deleted_at` IS NULL AND 1=1",
+          "tables": [
+            "money_exchange_wholesale_orders",
+            "finance_bank_accounts"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_17_finance_payments",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many finance payments reference an existing finance invoices record through invoice_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_payments` a INNER JOIN `finance_invoices` b ON a.`invoice_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "finance_payments",
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_18_crm_confirmed_sales",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many crm confirmed sales reference an existing crm leads record through crm_lead_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_confirmed_sales` a INNER JOIN `crm_leads` b ON a.`crm_lead_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "crm_confirmed_sales",
+            "crm_leads"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_19_crm_leads",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many crm leads reference an existing core party records (all party types) record through party_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_leads` a INNER JOIN `core_parties` b ON a.`party_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "crm_leads",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_22_dashboard_tiles",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many dashboard tiles reference an existing saved report definitions record through report_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `dashboard_tiles` a INNER JOIN `report_definitions` b ON a.`report_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "dashboard_tiles",
+            "report_definitions"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_23_finance_invoices",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many finance invoices reference an existing core party records (all party types) record through party_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `finance_invoices` a INNER JOIN `core_parties` b ON a.`party_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "finance_invoices",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_24_procurement_purchase_orders",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many procurement purchase orders reference an existing core party records (all party types) record through party_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `procurement_purchase_orders` a INNER JOIN `core_parties` b ON a.`party_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "procurement_purchase_orders",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_25_sales_orders",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many sales orders reference an existing core party records (all party types) record through party_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `sales_orders` a INNER JOIN `core_parties` b ON a.`party_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "sales_orders",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_26_inventory_stock_balances",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many inventory stock balances reference an existing core warehouses record through warehouse_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `inventory_stock_balances` a INNER JOIN `core_warehouses` b ON a.`warehouse_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "inventory_stock_balances",
+            "core_warehouses"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_27_crm_payments",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many crm payments reference an existing crm confirmed sales record through crm_confirmed_sale_id? Count each source record once. Include all statuses and organizations, exclude soft-deleted records on both sides. Return the total linked-record count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `crm_payments` a INNER JOIN `crm_confirmed_sales` b ON a.`crm_confirmed_sale_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "crm_payments",
+            "crm_confirmed_sales"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_20_hr_employees",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many hr employees reference existing core organizations through department_id? Count each source record once, across all statuses and organizations. Exclude deleted records wherever supported. Return the linked count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_employees` a INNER JOIN `core_organizations` b ON a.`department_id`=b.`id` WHERE 1=1 AND b.`deleted_at` IS NULL",
+          "tables": [
+            "hr_employees",
+            "core_organizations"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_21_construction_projects",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many construction projects reference existing construction main contracts through client_id? Count each source record once, across all statuses and organizations. Exclude deleted records wherever supported. Return the linked count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `construction_projects` a INNER JOIN `construction_main_contracts` b ON a.`client_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "construction_projects",
+            "construction_main_contracts"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_28_jewelry_custom_orders",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many jewelry custom orders reference existing core parties through party_id? Count each source record once, across all statuses and organizations. Exclude deleted records wherever supported. Return the linked count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `jewelry_custom_orders` a INNER JOIN `core_parties` b ON a.`party_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "jewelry_custom_orders",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_29_money_exchange_transactions",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many money exchange transactions reference existing core parties through customer_id? Count each source record once, across all statuses and organizations. Exclude deleted records wherever supported. Return the linked count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `money_exchange_transactions` a INNER JOIN `core_parties` b ON a.`customer_id`=b.`id` WHERE a.`deleted_at` IS NULL AND b.`deleted_at` IS NULL",
+          "tables": [
+            "money_exchange_transactions",
+            "core_parties"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "link_30_hr_payroll_lines",
+    "area": "interconnected",
+    "turns": [
+      {
+        "question": "How many hr payroll lines reference existing hr employees through employee_id? Count each source record once, across all statuses and organizations. Exclude deleted records wherever supported. Return the linked count.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "scalar_snapshot": {
+          "sql": "SELECT COUNT(*) AS total FROM `hr_payroll_lines` a INNER JOIN `hr_employees` b ON a.`employee_id`=b.`id` WHERE 1=1 AND 1=1",
+          "tables": [
+            "hr_payroll_lines",
+            "hr_employees"
+          ]
+        }
+      }
+    ]
+  }
+]

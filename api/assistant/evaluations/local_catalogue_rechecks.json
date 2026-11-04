@@ -1,0 +1,1303 @@
+[
+  {
+    "id": "pending_invitations",
+    "catalogue_ids": [
+      "COR-009"
+    ],
+    "scope": "Application-defined pending invitation state; no invented registered status.",
+    "question": "Count pending user invitations",
+    "query_plan": {
+      "base_table": "core_user_invitations",
+      "select": [
+        {
+          "table": "core_user_invitations",
+          "column": "id",
+          "aggregate": "COUNT",
+          "alias": "f1"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "core_user_invitations",
+          "column": "status",
+          "operator": "=",
+          "value": "pending"
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT COUNT(id) AS f1 FROM core_user_invitations WHERE status=%s",
+    "params": [
+      "pending"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "custom_field_definitions",
+    "catalogue_ids": [
+      "COR-010"
+    ],
+    "scope": "Actual definition types and keys; supplier values still require entity meta lookup.",
+    "question": "Which custom fields are configured for suppliers?",
+    "query_plan": {
+      "base_table": "core_custom_field_definitions",
+      "select": [
+        {
+          "table": "core_custom_field_definitions",
+          "column": "entity_type",
+          "alias": "f1"
+        },
+        {
+          "table": "core_custom_field_definitions",
+          "column": "key",
+          "alias": "f2"
+        },
+        {
+          "table": "core_custom_field_definitions",
+          "column": "status",
+          "alias": "f3"
+        }
+      ],
+      "joins": [],
+      "filters": [],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT entity_type AS f1, `key` AS f2, status AS f3 FROM core_custom_field_definitions",
+    "params": [],
+    "expected_truncated": false
+  },
+  {
+    "id": "sku_resolution",
+    "catalogue_ids": [
+      "SAL-004",
+      "X-004"
+    ],
+    "scope": "Resolve SKU to the real inventory ID before later queries.",
+    "question": "Resolve item SKU AN-QA-PART-A",
+    "query_plan": {
+      "base_table": "inventory_items",
+      "select": [
+        {
+          "table": "inventory_items",
+          "column": "id",
+          "alias": "f1"
+        },
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "alias": "f2"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "operator": "=",
+          "value": "AN-QA-PART-A"
+        },
+        {
+          "table": "inventory_items",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT id AS f1, sku AS f2 FROM inventory_items WHERE sku=%s AND deleted_at IS NULL",
+    "params": [
+      "AN-QA-PART-A"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "sku_order_quantity",
+    "catalogue_ids": [
+      "SAL-004"
+    ],
+    "scope": "Order quantity and subtotal; fulfillment/returns are separate sources.",
+    "question": "For SKU AN-QA-PART-A show sales order quantity and subtotal for September 2026",
+    "query_plan": {
+      "base_table": "sales_order_lines",
+      "select": [
+        {
+          "table": "sales_order_lines",
+          "column": "quantity",
+          "aggregate": "SUM",
+          "alias": "f1"
+        },
+        {
+          "table": "sales_order_lines",
+          "column": "subtotal",
+          "aggregate": "SUM",
+          "alias": "f2"
+        }
+      ],
+      "joins": [
+        {
+          "table": "sales_orders",
+          "left_table": "sales_order_lines",
+          "left_column": "sales_order_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "inventory_items",
+          "left_table": "sales_order_lines",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "operator": "=",
+          "value": "AN-QA-PART-A"
+        },
+        {
+          "table": "sales_orders",
+          "column": "order_date",
+          "operator": "BETWEEN",
+          "value": [
+            "2026-09-01",
+            "2026-09-30"
+          ]
+        },
+        {
+          "table": "sales_orders",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT SUM(l.quantity) AS f1,SUM(l.subtotal) AS f2 FROM sales_order_lines l JOIN sales_orders h ON l.sales_order_id=h.id JOIN inventory_items i ON l.item_id=i.id WHERE i.sku=%s AND h.order_date BETWEEN %s AND %s AND h.deleted_at IS NULL",
+    "params": [
+      "AN-QA-PART-A",
+      "2026-09-01",
+      "2026-09-30"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "sku_return_quantity",
+    "catalogue_ids": [
+      "SAL-004"
+    ],
+    "scope": "Recorded return quantities and amounts, not inferred from orders.",
+    "question": "For SKU AN-QA-PART-A show sales returns for September 2026",
+    "query_plan": {
+      "base_table": "sales_return_lines",
+      "select": [
+        {
+          "table": "sales_return_lines",
+          "column": "return_quantity",
+          "aggregate": "SUM",
+          "alias": "f1"
+        },
+        {
+          "table": "sales_return_lines",
+          "column": "subtotal",
+          "aggregate": "SUM",
+          "alias": "f2"
+        }
+      ],
+      "joins": [
+        {
+          "table": "sales_returns",
+          "left_table": "sales_return_lines",
+          "left_column": "sales_return_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "inventory_items",
+          "left_table": "sales_return_lines",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "operator": "=",
+          "value": "AN-QA-PART-A"
+        },
+        {
+          "table": "sales_returns",
+          "column": "return_date",
+          "operator": "BETWEEN",
+          "value": [
+            "2026-09-01",
+            "2026-09-30"
+          ]
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT SUM(l.return_quantity) AS f1,SUM(l.subtotal) AS f2 FROM sales_return_lines l JOIN sales_returns h ON l.sales_return_id=h.id JOIN inventory_items i ON l.item_id=i.id WHERE i.sku=%s AND h.return_date BETWEEN %s AND %s",
+    "params": [
+      "AN-QA-PART-A",
+      "2026-09-01",
+      "2026-09-30"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "jewelry_stock_by_location",
+    "catalogue_ids": [
+      "JEW-002"
+    ],
+    "scope": "Stored jewelry stock, reserved quantities and weights by exact location.",
+    "question": "Show jewelry stock by item, weight and location",
+    "query_plan": {
+      "base_table": "jewelry_stock_balances",
+      "select": [
+        {
+          "table": "jewelry_items",
+          "column": "code",
+          "alias": "f1"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "code",
+          "alias": "f2"
+        },
+        {
+          "table": "jewelry_stock_balances",
+          "column": "qty_on_hand",
+          "alias": "f3"
+        },
+        {
+          "table": "jewelry_stock_balances",
+          "column": "qty_reserved",
+          "alias": "f4"
+        },
+        {
+          "table": "jewelry_stock_balances",
+          "column": "net_weight",
+          "alias": "f5"
+        },
+        {
+          "table": "jewelry_stock_balances",
+          "column": "weight_on_hand",
+          "alias": "f6"
+        }
+      ],
+      "joins": [
+        {
+          "table": "jewelry_items",
+          "left_table": "jewelry_stock_balances",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "core_warehouses",
+          "left_table": "jewelry_stock_balances",
+          "left_column": "warehouse_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT i.code AS f1,w.code AS f2,b.qty_on_hand AS f3,b.qty_reserved AS f4,b.net_weight AS f5,b.weight_on_hand AS f6 FROM jewelry_stock_balances b JOIN jewelry_items i ON b.item_id=i.id JOIN core_warehouses w ON b.warehouse_id=w.id",
+    "params": [],
+    "expected_truncated": false
+  },
+  {
+    "id": "active_jewelry_reservations",
+    "catalogue_ids": [
+      "JEW-009"
+    ],
+    "scope": "Active reservation and linked stock-unit status. Balances are checked separately to avoid fanout.",
+    "question": "List active jewelry stock reservations and their stock unit status",
+    "query_plan": {
+      "base_table": "jewelry_stock_reservations",
+      "select": [
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "id",
+          "alias": "f1"
+        },
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "item_id",
+          "alias": "f2"
+        },
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "stock_unit_id",
+          "alias": "f3"
+        },
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "warehouse_id",
+          "alias": "f4"
+        },
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "qty_reserved",
+          "alias": "f5"
+        },
+        {
+          "table": "jewelry_stock_units",
+          "column": "status",
+          "alias": "f6"
+        }
+      ],
+      "joins": [
+        {
+          "table": "jewelry_stock_units",
+          "left_table": "jewelry_stock_reservations",
+          "left_column": "stock_unit_id",
+          "right_column": "id",
+          "type": "LEFT"
+        }
+      ],
+      "filters": [
+        {
+          "table": "jewelry_stock_reservations",
+          "column": "status",
+          "operator": "=",
+          "value": "active"
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT r.id AS f1,r.item_id AS f2,r.stock_unit_id AS f3,r.warehouse_id AS f4,r.qty_reserved AS f5,u.status AS f6 FROM jewelry_stock_reservations r LEFT JOIN jewelry_stock_units u ON r.stock_unit_id=u.id WHERE r.status=%s",
+    "params": [
+      "active"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "dashboard_saved_metric",
+    "catalogue_ids": [
+      "RPT-003",
+      "X-017"
+    ],
+    "scope": "Saved dashboard report metric definitions only; does not execute stored SQL.",
+    "question": "Show the actual Jewelry Operations Overview dashboard metric definition",
+    "query_plan": {
+      "base_table": "dashboards",
+      "select": [
+        {
+          "table": "dashboards",
+          "column": "name",
+          "alias": "f1"
+        },
+        {
+          "table": "dashboard_tiles",
+          "column": "title",
+          "alias": "f2"
+        },
+        {
+          "table": "report_definitions",
+          "column": "code",
+          "alias": "f3"
+        },
+        {
+          "table": "report_definitions",
+          "column": "query",
+          "alias": "f4"
+        },
+        {
+          "table": "dashboard_tiles",
+          "column": "filter_overrides",
+          "alias": "f5"
+        }
+      ],
+      "joins": [
+        {
+          "table": "dashboard_tiles",
+          "left_table": "dashboards",
+          "left_column": "id",
+          "right_column": "dashboard_id",
+          "type": "INNER"
+        },
+        {
+          "table": "report_definitions",
+          "left_table": "dashboard_tiles",
+          "left_column": "report_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "dashboards",
+          "column": "name",
+          "operator": "=",
+          "value": "Jewelry Operations Overview"
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT d.name AS f1,t.title AS f2,r.code AS f3,r.query AS f4,t.filter_overrides AS f5 FROM dashboards d JOIN dashboard_tiles t ON t.dashboard_id=d.id JOIN report_definitions r ON t.report_id=r.id WHERE d.name=%s",
+    "params": [
+      "Jewelry Operations Overview"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "page_limit_metadata",
+    "catalogue_ids": [
+      "RPT-006"
+    ],
+    "scope": "Tool truncation behavior only; saved-report execution is a separate integration.",
+    "question": "List jewelry stock balances with an explicit page limit of 2",
+    "query_plan": {
+      "base_table": "jewelry_stock_balances",
+      "select": [
+        {
+          "table": "jewelry_stock_balances",
+          "column": "id",
+          "alias": "f1"
+        }
+      ],
+      "joins": [],
+      "filters": [],
+      "group_by": [],
+      "limit": 2,
+      "order_by": [
+        {
+          "alias": "f1",
+          "direction": "asc"
+        }
+      ]
+    },
+    "oracle_sql": "SELECT id AS f1 FROM jewelry_stock_balances ORDER BY id ASC LIMIT 2",
+    "params": [],
+    "expected_truncated": true
+  },
+  {
+    "id": "supplier_receipts_by_item",
+    "catalogue_ids": [
+      "X-001",
+      "X-029"
+    ],
+    "scope": "Historical receipts by SKU and recorded line UOM; not current stock. This check verifies the first ordered page, not a complete export.",
+    "question": "For supplier party ID 1 show received quantity by SKU and unit",
+    "query_plan": {
+      "base_table": "procurement_goods_receipt_note_lines",
+      "select": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "alias": "f1"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "uom_id",
+          "alias": "f2"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "received_quantity",
+          "aggregate": "SUM",
+          "alias": "f3"
+        }
+      ],
+      "joins": [
+        {
+          "table": "procurement_goods_receipt_notes",
+          "left_table": "procurement_goods_receipt_note_lines",
+          "left_column": "goods_receipt_note_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "inventory_items",
+          "left_table": "procurement_goods_receipt_note_lines",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "procurement_goods_receipt_notes",
+          "column": "party_id",
+          "operator": "=",
+          "value": 1
+        }
+      ],
+      "group_by": [
+        {
+          "table": "inventory_items",
+          "column": "sku"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "uom_id"
+        }
+      ],
+      "limit": 500,
+      "order_by": [
+        {
+          "alias": "f1",
+          "direction": "asc"
+        },
+        {
+          "alias": "f2",
+          "direction": "asc"
+        }
+      ]
+    },
+    "oracle_sql": "SELECT i.sku AS f1,l.uom_id AS f2,SUM(l.received_quantity) AS f3 FROM procurement_goods_receipt_note_lines l JOIN procurement_goods_receipt_notes h ON l.goods_receipt_note_id=h.id JOIN inventory_items i ON l.item_id=i.id WHERE h.party_id=%s GROUP BY i.sku,l.uom_id ORDER BY f1 ASC,f2 ASC LIMIT 500",
+    "params": [
+      1
+    ],
+    "expected_truncated": true
+  },
+  {
+    "id": "current_stock_by_item_warehouse",
+    "catalogue_ids": [
+      "X-001"
+    ],
+    "scope": "Current balances kept separate from historical supplier receipts. This check verifies the first ordered page, not a complete export.",
+    "question": "Show current stock by SKU and warehouse",
+    "query_plan": {
+      "base_table": "inventory_stock_balances",
+      "select": [
+        {
+          "table": "inventory_stock_balances",
+          "column": "item_id",
+          "alias": "f1"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "code",
+          "alias": "f2"
+        },
+        {
+          "table": "inventory_stock_balances",
+          "column": "qty_available",
+          "aggregate": "SUM",
+          "alias": "f3"
+        }
+      ],
+      "joins": [
+        {
+          "table": "core_warehouses",
+          "left_table": "inventory_stock_balances",
+          "left_column": "warehouse_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "core_warehouses",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "is_active",
+          "operator": "=",
+          "value": 1
+        }
+      ],
+      "group_by": [
+        {
+          "table": "inventory_stock_balances",
+          "column": "item_id"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "code"
+        }
+      ],
+      "limit": 500,
+      "order_by": [
+        {
+          "alias": "f1",
+          "direction": "asc"
+        },
+        {
+          "alias": "f2",
+          "direction": "asc"
+        }
+      ]
+    },
+    "oracle_sql": "SELECT b.item_id AS f1,w.code AS f2,SUM(b.qty_available) AS f3 FROM inventory_stock_balances b JOIN core_warehouses w ON b.warehouse_id=w.id WHERE w.deleted_at IS NULL AND w.is_active=1 GROUP BY b.item_id,w.code ORDER BY f1 ASC,f2 ASC LIMIT 500",
+    "params": [],
+    "expected_truncated": true
+  },
+  {
+    "id": "po_ordered_received_lines",
+    "catalogue_ids": [
+      "X-002"
+    ],
+    "scope": "Stored PO line ordered and received quantities for the unambiguous approved PO ID.",
+    "question": "For procurement purchase order ID 9 compare ordered and received quantity",
+    "query_plan": {
+      "base_table": "procurement_purchase_order_lines",
+      "select": [
+        {
+          "table": "procurement_purchase_order_lines",
+          "column": "item_id",
+          "alias": "f1"
+        },
+        {
+          "table": "procurement_purchase_order_lines",
+          "column": "uom_id",
+          "alias": "f2"
+        },
+        {
+          "table": "procurement_purchase_order_lines",
+          "column": "quantity",
+          "alias": "f3"
+        },
+        {
+          "table": "procurement_purchase_order_lines",
+          "column": "received_quantity",
+          "alias": "f4"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "procurement_purchase_order_lines",
+          "column": "purchase_order_id",
+          "operator": "=",
+          "value": 9
+        }
+      ],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT item_id AS f1,uom_id AS f2,quantity AS f3,received_quantity AS f4 FROM procurement_purchase_order_lines WHERE purchase_order_id=%s",
+    "params": [
+      9
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "pos_stock_movement",
+    "catalogue_ids": [
+      "X-004"
+    ],
+    "scope": "POS reference discriminator is mandatory; no unrelated reference_id matches.",
+    "question": "For SKU AN-QA-PART-A show POS stock movement on 2026-10-22",
+    "query_plan": {
+      "base_table": "inventory_stock_ledger",
+      "select": [
+        {
+          "table": "inventory_stock_ledger",
+          "column": "type",
+          "alias": "f1"
+        },
+        {
+          "table": "inventory_stock_ledger",
+          "column": "quantity",
+          "aggregate": "SUM",
+          "alias": "f2"
+        }
+      ],
+      "joins": [
+        {
+          "table": "sales_pos",
+          "left_table": "inventory_stock_ledger",
+          "left_column": "reference_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "inventory_items",
+          "left_table": "inventory_stock_ledger",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "operator": "=",
+          "value": "AN-QA-PART-A"
+        },
+        {
+          "table": "sales_pos",
+          "column": "created_at",
+          "operator": "BETWEEN",
+          "value": [
+            "2026-10-22 00:00:00",
+            "2026-10-22 23:59:59"
+          ]
+        }
+      ],
+      "group_by": [
+        {
+          "table": "inventory_stock_ledger",
+          "column": "type"
+        }
+      ],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT l.type AS f1,SUM(l.quantity) AS f2 FROM inventory_stock_ledger l JOIN sales_pos p ON l.reference_id=p.id AND l.reference_type=%s JOIN inventory_items i ON l.item_id=i.id WHERE i.sku=%s AND p.created_at BETWEEN %s AND %s GROUP BY l.type",
+    "params": [
+      "POS",
+      "AN-QA-PART-A",
+      "2026-10-22 00:00:00",
+      "2026-10-22 23:59:59"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "project_boq_resources",
+    "catalogue_ids": [
+      "X-008"
+    ],
+    "scope": "BOQ resources and category/UOM; procurement/item linkage remains unverified.",
+    "question": "For project PRJ-2026-001 show BOQ material requirements",
+    "query_plan": {
+      "base_table": "construction_project_boq_resources",
+      "select": [
+        {
+          "table": "construction_project_boq_resources",
+          "column": "category",
+          "alias": "f1"
+        },
+        {
+          "table": "construction_project_boq_resources",
+          "column": "unit",
+          "alias": "f2"
+        },
+        {
+          "table": "construction_project_boq_resources",
+          "column": "qty",
+          "aggregate": "SUM",
+          "alias": "f3"
+        }
+      ],
+      "joins": [
+        {
+          "table": "construction_project_boqs",
+          "left_table": "construction_project_boq_resources",
+          "left_column": "boq_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "construction_projects",
+          "left_table": "construction_project_boqs",
+          "left_column": "project_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "construction_projects",
+          "column": "project_code",
+          "operator": "=",
+          "value": "PRJ-2026-001"
+        },
+        {
+          "table": "construction_project_boq_resources",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        },
+        {
+          "table": "construction_project_boqs",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        },
+        {
+          "table": "construction_projects",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        }
+      ],
+      "group_by": [
+        {
+          "table": "construction_project_boq_resources",
+          "column": "category"
+        },
+        {
+          "table": "construction_project_boq_resources",
+          "column": "unit"
+        }
+      ],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT r.category AS f1,r.unit AS f2,SUM(r.qty) AS f3 FROM construction_project_boq_resources r JOIN construction_project_boqs b ON r.boq_id=b.id JOIN construction_projects p ON b.project_id=p.id WHERE p.project_code=%s AND r.deleted_at IS NULL AND b.deleted_at IS NULL AND p.deleted_at IS NULL GROUP BY r.category,r.unit",
+    "params": [
+      "PRJ-2026-001"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "jewelry_receipt_po_invoice",
+    "catalogue_ids": [
+      "X-013"
+    ],
+    "scope": "Verified GRN purchase_order_id and invoice_id links; compare due vs settled without multiplying payment rows.",
+    "question": "For received jewelry show PO receipt supplier invoice and remaining payment",
+    "query_plan": {
+      "base_table": "jewelry_goods_receipt_notes",
+      "select": [
+        {
+          "table": "jewelry_goods_receipt_notes",
+          "column": "grn_number",
+          "alias": "f1"
+        },
+        {
+          "table": "jewelry_purchase_orders",
+          "column": "po_number",
+          "alias": "f2"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "invoice_number",
+          "alias": "f3"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "currency_id",
+          "alias": "f4"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_due",
+          "alias": "f5"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_settled",
+          "alias": "f6"
+        }
+      ],
+      "joins": [
+        {
+          "table": "jewelry_purchase_orders",
+          "left_table": "jewelry_goods_receipt_notes",
+          "left_column": "purchase_order_id",
+          "right_column": "id",
+          "type": "LEFT"
+        },
+        {
+          "table": "finance_invoices",
+          "left_table": "jewelry_goods_receipt_notes",
+          "left_column": "invoice_id",
+          "right_column": "id",
+          "type": "LEFT"
+        }
+      ],
+      "filters": [],
+      "group_by": [],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT g.grn_number AS f1,p.po_number AS f2,f.invoice_number AS f3,f.currency_id AS f4,f.amount_due AS f5,f.amount_settled AS f6 FROM jewelry_goods_receipt_notes g LEFT JOIN jewelry_purchase_orders p ON g.purchase_order_id=p.id LEFT JOIN finance_invoices f ON g.invoice_id=f.id",
+    "params": [],
+    "expected_truncated": false
+  },
+  {
+    "id": "finance_by_party_currency",
+    "catalogue_ids": [
+      "X-023",
+      "X-017"
+    ],
+    "scope": "AR invoice amounts and settlements by transaction currency and stored base amounts; not inferred from payments.",
+    "question": "For party ID 1 compare sales invoices in September 2026 by currency",
+    "query_plan": {
+      "base_table": "finance_invoices",
+      "select": [
+        {
+          "table": "finance_invoices",
+          "column": "currency_id",
+          "alias": "f1"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_due",
+          "aggregate": "SUM",
+          "alias": "f2"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_settled",
+          "aggregate": "SUM",
+          "alias": "f3"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "base_currency_amount_due",
+          "aggregate": "SUM",
+          "alias": "f4"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "base_currency_amount_settled",
+          "aggregate": "SUM",
+          "alias": "f5"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "finance_invoices",
+          "column": "party_id",
+          "operator": "=",
+          "value": 1
+        },
+        {
+          "table": "finance_invoices",
+          "column": "type",
+          "operator": "=",
+          "value": "ar"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "invoice_date",
+          "operator": "BETWEEN",
+          "value": [
+            "2026-09-01",
+            "2026-09-30"
+          ]
+        }
+      ],
+      "group_by": [
+        {
+          "table": "finance_invoices",
+          "column": "currency_id"
+        }
+      ],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT currency_id AS f1,SUM(amount_due) AS f2,SUM(amount_settled) AS f3,SUM(base_currency_amount_due) AS f4,SUM(base_currency_amount_settled) AS f5 FROM finance_invoices WHERE party_id=%s AND type=%s AND invoice_date BETWEEN %s AND %s GROUP BY currency_id",
+    "params": [
+      1,
+      "ar",
+      "2026-09-01",
+      "2026-09-30"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "party_recorded_payments",
+    "catalogue_ids": [
+      "X-023"
+    ],
+    "scope": "Recorded payments and unapplied amounts; stored base-currency payment amount is not an allocation total.",
+    "question": "For party ID 1 show finance payments in September 2026 by currency",
+    "query_plan": {
+      "base_table": "finance_payments",
+      "select": [
+        {
+          "table": "finance_payments",
+          "column": "currency_id",
+          "alias": "f1"
+        },
+        {
+          "table": "finance_payments",
+          "column": "payment_amount",
+          "aggregate": "SUM",
+          "alias": "f2"
+        },
+        {
+          "table": "finance_payments",
+          "column": "unapplied_amount",
+          "aggregate": "SUM",
+          "alias": "f3"
+        },
+        {
+          "table": "finance_payments",
+          "column": "base_currency_amount",
+          "aggregate": "SUM",
+          "alias": "f4"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "finance_payments",
+          "column": "party_id",
+          "operator": "=",
+          "value": 1
+        },
+        {
+          "table": "finance_payments",
+          "column": "payment_date",
+          "operator": "BETWEEN",
+          "value": [
+            "2026-09-01",
+            "2026-09-30"
+          ]
+        }
+      ],
+      "group_by": [
+        {
+          "table": "finance_payments",
+          "column": "currency_id"
+        }
+      ],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT currency_id AS f1,SUM(payment_amount) AS f2,SUM(unapplied_amount) AS f3,SUM(base_currency_amount) AS f4 FROM finance_payments WHERE party_id=%s AND payment_date BETWEEN %s AND %s GROUP BY currency_id",
+    "params": [
+      1,
+      "2026-09-01",
+      "2026-09-30"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "supplier_ap_by_currency",
+    "catalogue_ids": [
+      "X-029"
+    ],
+    "scope": "Aggregate AP separately before combining with receipt quantities; outstanding is due minus settled.",
+    "question": "List supplier AP invoice amounts by party and currency",
+    "query_plan": {
+      "base_table": "finance_invoices",
+      "select": [
+        {
+          "table": "finance_invoices",
+          "column": "party_id",
+          "alias": "f1"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "currency_id",
+          "alias": "f2"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_due",
+          "aggregate": "SUM",
+          "alias": "f3"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "amount_settled",
+          "aggregate": "SUM",
+          "alias": "f4"
+        }
+      ],
+      "joins": [],
+      "filters": [
+        {
+          "table": "finance_invoices",
+          "column": "type",
+          "operator": "=",
+          "value": "ap"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "status",
+          "operator": "!=",
+          "value": "voided"
+        }
+      ],
+      "group_by": [
+        {
+          "table": "finance_invoices",
+          "column": "party_id"
+        },
+        {
+          "table": "finance_invoices",
+          "column": "currency_id"
+        }
+      ],
+      "limit": 500,
+      "order_by": []
+    },
+    "oracle_sql": "SELECT party_id AS f1,currency_id AS f2,SUM(amount_due) AS f3,SUM(amount_settled) AS f4 FROM finance_invoices WHERE type=%s AND status<>%s GROUP BY party_id,currency_id",
+    "params": [
+      "ap",
+      "voided"
+    ],
+    "expected_truncated": false
+  },
+  {
+    "id": "supplier_receipts_by_item_next_page",
+    "catalogue_ids": [
+      "X-001",
+      "X-029"
+    ],
+    "scope": "Second ordered page with identical filters and grouping; not a full export.",
+    "question": "For supplier party ID 1 show received quantity by SKU and unit",
+    "query_plan": {
+      "base_table": "procurement_goods_receipt_note_lines",
+      "select": [
+        {
+          "table": "inventory_items",
+          "column": "sku",
+          "alias": "f1"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "uom_id",
+          "alias": "f2"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "received_quantity",
+          "aggregate": "SUM",
+          "alias": "f3"
+        }
+      ],
+      "joins": [
+        {
+          "table": "procurement_goods_receipt_notes",
+          "left_table": "procurement_goods_receipt_note_lines",
+          "left_column": "goods_receipt_note_id",
+          "right_column": "id",
+          "type": "INNER"
+        },
+        {
+          "table": "inventory_items",
+          "left_table": "procurement_goods_receipt_note_lines",
+          "left_column": "item_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "procurement_goods_receipt_notes",
+          "column": "party_id",
+          "operator": "=",
+          "value": 1
+        }
+      ],
+      "group_by": [
+        {
+          "table": "inventory_items",
+          "column": "sku"
+        },
+        {
+          "table": "procurement_goods_receipt_note_lines",
+          "column": "uom_id"
+        }
+      ],
+      "limit": 500,
+      "order_by": [
+        {
+          "alias": "f1",
+          "direction": "asc"
+        },
+        {
+          "alias": "f2",
+          "direction": "asc"
+        }
+      ],
+      "offset": 500
+    },
+    "oracle_sql": "SELECT i.sku AS f1,l.uom_id AS f2,SUM(l.received_quantity) AS f3 FROM procurement_goods_receipt_note_lines l JOIN procurement_goods_receipt_notes h ON l.goods_receipt_note_id=h.id JOIN inventory_items i ON l.item_id=i.id WHERE h.party_id=%s GROUP BY i.sku,l.uom_id ORDER BY f1 ASC,f2 ASC LIMIT 500 OFFSET 500",
+    "params": [
+      1
+    ],
+    "expected_truncated": true
+  },
+  {
+    "id": "current_stock_by_item_warehouse_next_page",
+    "catalogue_ids": [
+      "X-001"
+    ],
+    "scope": "Second ordered page with identical filters and grouping; not a full export.",
+    "question": "Show current stock by SKU and warehouse",
+    "query_plan": {
+      "base_table": "inventory_stock_balances",
+      "select": [
+        {
+          "table": "inventory_stock_balances",
+          "column": "item_id",
+          "alias": "f1"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "code",
+          "alias": "f2"
+        },
+        {
+          "table": "inventory_stock_balances",
+          "column": "qty_available",
+          "aggregate": "SUM",
+          "alias": "f3"
+        }
+      ],
+      "joins": [
+        {
+          "table": "core_warehouses",
+          "left_table": "inventory_stock_balances",
+          "left_column": "warehouse_id",
+          "right_column": "id",
+          "type": "INNER"
+        }
+      ],
+      "filters": [
+        {
+          "table": "core_warehouses",
+          "column": "deleted_at",
+          "operator": "IS NULL"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "is_active",
+          "operator": "=",
+          "value": 1
+        }
+      ],
+      "group_by": [
+        {
+          "table": "inventory_stock_balances",
+          "column": "item_id"
+        },
+        {
+          "table": "core_warehouses",
+          "column": "code"
+        }
+      ],
+      "limit": 500,
+      "order_by": [
+        {
+          "alias": "f1",
+          "direction": "asc"
+        },
+        {
+          "alias": "f2",
+          "direction": "asc"
+        }
+      ],
+      "offset": 500
+    },
+    "oracle_sql": "SELECT b.item_id AS f1,w.code AS f2,SUM(b.qty_available) AS f3 FROM inventory_stock_balances b JOIN core_warehouses w ON b.warehouse_id=w.id WHERE w.deleted_at IS NULL AND w.is_active=1 GROUP BY b.item_id,w.code ORDER BY f1 ASC,f2 ASC LIMIT 500 OFFSET 500",
+    "params": [],
+    "expected_truncated": true
+  }
+]

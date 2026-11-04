@@ -1,0 +1,649 @@
+[
+  {
+    "id": "P-JEW-007",
+    "area": "JEW",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "What transformations lost or gained metal?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "output minus source",
+          "fine"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,transformation_number,transformation_date,status,source_total_gross_weight,output_total_gross_weight,source_total_net_weight,output_total_net_weight,source_total_fine_weight,output_total_fine_weight,wastage_weight,dust_recovery_weight,output_total_gross_weight-source_total_gross_weight gross_weight_change,output_total_net_weight-source_total_net_weight net_weight_change,output_total_fine_weight-source_total_fine_weight fine_weight_change FROM jewelry_transformations ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-MEX-008",
+    "area": "MEX",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "Show denomination count and cash value for T1.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "denomination_value \u00d7 quantity",
+          "Different currencies"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,currency_code,denomination_value,quantity,denomination_value*quantity cash_value FROM money_exchange_till_inventories WHERE terminal_id=(SELECT id FROM core_terminals WHERE name='T1' LIMIT 1) ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT currency_code,SUM(denomination_value*quantity) cash_value FROM money_exchange_till_inventories WHERE terminal_id=(SELECT id FROM core_terminals WHERE name='T1' LIMIT 1) GROUP BY currency_code ORDER BY currency_code LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-COR-007",
+    "area": "COR",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "Show the organization\u2019s currency and its warehouses.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "tenant-wide finance default"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,name,code,symbol,status FROM core_currencies WHERE id=CAST((SELECT value FROM core_config WHERE `key`='base_currency' LIMIT 1) AS UNSIGNED)",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT id,organization_id,code,name,is_active FROM core_warehouses WHERE deleted_at IS NULL ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-INV-010",
+    "area": "INV",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "Show items with no stock, including any that do not track stock.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "No balance records",
+          "matching items"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT i.id,i.sku,i.name,i.has_stocks,i.status,COUNT(b.id) balance_records,SUM(b.qty_available) available FROM inventory_items i LEFT JOIN inventory_stock_balances b ON b.item_id=i.id WHERE i.deleted_at IS NULL GROUP BY i.id,i.sku,i.name,i.has_stocks,i.status HAVING SUM(b.qty_available)<=0 OR SUM(b.qty_available) IS NULL ORDER BY i.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-CNS-003",
+    "area": "CNS",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "Show approved change orders and revised contract value.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Calculated revised contract value",
+          "double count"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT p.id,p.project_code,p.name,p.currency,p.contract_value,COALESCE(v.n,0) approved_change_orders,COALESCE(v.impact,0) approved_cost_impact,p.contract_value+COALESCE(v.impact,0) calculated_revised_contract_value FROM construction_projects p LEFT JOIN (SELECT project_id,COUNT(*) n,SUM(cost_impact) impact FROM construction_change_orders WHERE status='Approved' AND deleted_at IS NULL GROUP BY project_id) v ON v.project_id=p.id WHERE p.deleted_at IS NULL ORDER BY p.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-FIN-010",
+    "area": "FIN",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "What were opening balances at go-live?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "go-live",
+          "not today"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT j.id journal_id,j.organization_id,j.entry_date,j.reference,j.narration,j.status,a.code account_code,a.name account,l.debit,l.credit FROM fin_journal_entry_lines l JOIN fin_journal_entries j ON j.id=l.journal_entry_id JOIN fin_chart_of_accounts a ON a.id=l.account_id WHERE j.narration LIKE 'Opening Balance%' ORDER BY j.id,j.organization_id,j.entry_date,j.reference,j.narration,j.status,a.code,a.name,l.debit,l.credit LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-X-013",
+    "area": "X",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "For received jewelry items, show PO, receipt, supplier invoice, and remaining payment.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "whole-invoice balance",
+          "posts stock on approval"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT l.id receipt_line_id,l.item_id,l.item_name,l.received_quantity,g.grn_number,g.received_date,g.party_id,p.po_number,i.invoice_number,i.currency_id,i.status invoice_status,i.amount_due-i.amount_settled remaining_payment FROM jewelry_goods_receipt_note_lines l JOIN jewelry_goods_receipt_notes g ON g.id=l.goods_receipt_note_id LEFT JOIN jewelry_purchase_orders p ON p.id=g.purchase_order_id LEFT JOIN finance_invoices i ON i.id=g.invoice_id WHERE g.status IN ('approved','completed') ORDER BY l.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-X-029",
+    "area": "X",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "List every supplier with received quantity and outstanding AP.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Independent reads",
+          "UOMs separate"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,organization_id,code,first_name,last_name,status FROM core_parties WHERE type LIKE '%supplier%' AND deleted_at IS NULL ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT g.organization_id,g.party_id,l.uom_id,SUM(l.received_quantity) received_quantity FROM procurement_goods_receipt_note_lines l JOIN procurement_goods_receipt_notes g ON g.id=l.goods_receipt_note_id WHERE g.status='completed' GROUP BY g.organization_id,g.party_id,l.uom_id ORDER BY g.organization_id,g.party_id,l.uom_id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT organization_id,party_id,currency_id,SUM(amount_due-amount_settled) outstanding_ap FROM finance_invoices WHERE type='ap' AND status!='voided' GROUP BY organization_id,party_id,currency_id ORDER BY organization_id,party_id,currency_id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-JEW-005",
+    "area": "JEW",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "Which jewelry sales were returned, and what metal/quantity was restored?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "customer metal refund obligation",
+          "not an immutable restoration event"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT l.id return_line_id,r.id return_id,r.return_number,s.sale_number,r.return_date,l.item_id,l.stock_unit_id,l.unit_type,l.quantity,l.return_weight,l.return_stone_weight,u.status current_stock_unit_status FROM jewelry_sale_return_items l JOIN jewelry_sale_returns r ON r.id=l.return_id JOIN jewelry_sales s ON s.id=r.sale_id LEFT JOIN jewelry_stock_units u ON u.id=l.stock_unit_id WHERE r.status='completed' AND r.deleted_at IS NULL ORDER BY l.id,r.id,r.return_number,s.sale_number,r.return_date,l.item_id,l.stock_unit_id,l.unit_type,l.quantity,l.return_weight,l.return_stone_weight,u.status LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-X-028",
+    "area": "X",
+    "verification_limit": "Independent SELECTs check the rendered datasets; source-history limitations remain explicit.",
+    "turns": [
+      {
+        "question": "For SKU AN-QA-KIT, compare any recorded PO quantity, current available stock, BOM requirement for 5 units, and sales quantity in September 2026. Do not invent missing transaction history.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "demand:.*5",
+          "Shortage",
+          "not receipts"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT p.organization_id,p.status,l.uom_id,SUM(l.quantity) recorded_po_quantity FROM procurement_purchase_order_lines l JOIN procurement_purchase_orders p ON p.id=l.purchase_order_id WHERE l.item_id=(SELECT id FROM inventory_items WHERE sku='AN-QA-KIT' AND deleted_at IS NULL) AND p.deleted_at IS NULL GROUP BY p.organization_id,p.status,l.uom_id ORDER BY p.organization_id,p.status,l.uom_id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT b.organization_id,b.warehouse_id,SUM(b.qty_on_hand) on_hand,SUM(b.qty_allocated) allocated,SUM(b.qty_available) available FROM inventory_stock_balances b WHERE b.item_id=(SELECT id FROM inventory_items WHERE sku='AN-QA-KIT' AND deleted_at IS NULL) GROUP BY b.organization_id,b.warehouse_id ORDER BY b.organization_id,b.warehouse_id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT g.organization_id,l.uom_id,SUM(l.dispatch_quantity) completed_dispatched_quantity FROM sales_goods_issue_note_lines l JOIN sales_goods_issue_notes g ON g.id=l.goods_issue_note_id WHERE l.item_id=(SELECT id FROM inventory_items WHERE sku='AN-QA-KIT' AND deleted_at IS NULL) AND g.status='completed' AND g.dispatch_date BETWEEN '2026-09-01' AND '2026-09-30' GROUP BY g.organization_id,l.uom_id ORDER BY g.organization_id,l.uom_id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-GPT-SUBTRACT",
+    "area": "generated_arithmetic",
+    "turns": [
+      {
+        "question": "For finance invoice ID 1 show its invoice number, currency ID and amount_due minus amount_settled as computed_balance.",
+        "requires_provider": true,
+        "expected_status": "answered",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshot": {
+          "sql": "SELECT invoice_number,currency_id,amount_due-amount_settled computed_balance FROM finance_invoices WHERE id=1",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "P-GPT-ADD",
+    "area": "generated_arithmetic",
+    "turns": [
+      {
+        "question": "For finance invoice ID 1 show its invoice number and amount_due plus amount_settled as arithmetic_total.",
+        "requires_provider": true,
+        "expected_status": "answered",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshot": {
+          "sql": "SELECT invoice_number,amount_due+amount_settled arithmetic_total FROM finance_invoices WHERE id=1",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "P-GPT-MULTIPLY",
+    "area": "generated_arithmetic",
+    "turns": [
+      {
+        "question": "For finance invoice ID 1 show its invoice number and amount_due multiplied by 0.15 as hypothetical_tax. This is hypothetical arithmetic, not a recorded tax.",
+        "requires_provider": true,
+        "expected_status": "answered",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshot": {
+          "sql": "SELECT invoice_number,amount_due*0.15 hypothetical_tax FROM finance_invoices WHERE id=1",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "P-GPT-DIVIDE",
+    "area": "generated_arithmetic",
+    "turns": [
+      {
+        "question": "For finance invoice ID 1 show its invoice number and amount_due divided by amount_settled as payment_ratio. Leave division by zero undefined.",
+        "requires_provider": true,
+        "expected_status": "answered",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "row_snapshot": {
+          "sql": "SELECT invoice_number,amount_due/NULLIF(amount_settled,0) payment_ratio FROM finance_invoices WHERE id=1",
+          "tables": [
+            "finance_invoices"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "P-PAYSLIP-PERIOD",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "Has the payslip for employee AN-QA-EMP-A been published for September 2026?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "period_year/period_month",
+          "No payslip file is recorded",
+          "approval alone"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT l.id payroll_line_id,r.id run_id,r.period_year,r.period_month,r.status run_status,l.is_held,CASE WHEN l.payslip_path IS NULL OR l.payslip_path='' THEN 0 ELSE 1 END payslip_file_recorded FROM hr_payroll_lines l JOIN hr_payroll_runs r ON r.id=l.run_id JOIN hr_employees e ON e.id=l.employee_id WHERE e.employee_code='AN-QA-EMP-A' AND r.period_year=2026 AND r.period_month=9 ORDER BY l.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "expected_status": "partial"
+      }
+    ]
+  },
+  {
+    "id": "P-ATTENDANCE-INDICATORS",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "Show attendance exceptions for 2026-09-22.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Minutes remain minutes",
+          "payroll deduction"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,employee_id,work_date,status,is_late,late_minutes,is_early_out,early_minutes,shortfall_minutes,first_in,last_out FROM hr_attendance_days WHERE work_date='2026-09-22' AND (status IN ('A','HD','LWP','LOP') OR is_late=1 OR is_early_out=1 OR shortfall_minutes>0) ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-LATEST-PO-RECEIPTS",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "Show the latest PO for SKU MED-COT-01 and its current receipt status.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Latest uses order_date",
+          "Only completed receipts"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT p.id,p.organization_id,p.po_number,p.order_date,p.status,p.party_id FROM procurement_purchase_orders p WHERE p.id=(SELECT p.id FROM procurement_purchase_orders p JOIN procurement_purchase_order_lines l ON l.purchase_order_id=p.id WHERE l.item_id=(SELECT id FROM inventory_items WHERE sku='MED-COT-01' AND deleted_at IS NULL) AND p.deleted_at IS NULL GROUP BY p.id,p.order_date ORDER BY p.order_date DESC,p.id DESC LIMIT 1)",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT id,uom_id,quantity,received_quantity FROM procurement_purchase_order_lines WHERE purchase_order_id=(SELECT p.id FROM procurement_purchase_orders p JOIN procurement_purchase_order_lines l ON l.purchase_order_id=p.id WHERE l.item_id=(SELECT id FROM inventory_items WHERE sku='MED-COT-01' AND deleted_at IS NULL) AND p.deleted_at IS NULL GROUP BY p.id,p.order_date ORDER BY p.order_date DESC,p.id DESC LIMIT 1) AND item_id=(SELECT id FROM inventory_items WHERE sku='MED-COT-01' AND deleted_at IS NULL) ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT g.id receipt_id,g.grn_number,g.received_date,g.status,l.uom_id,l.received_quantity FROM procurement_goods_receipt_note_lines l JOIN procurement_goods_receipt_notes g ON g.id=l.goods_receipt_note_id WHERE g.purchase_order_id=(SELECT p.id FROM procurement_purchase_orders p JOIN procurement_purchase_order_lines l ON l.purchase_order_id=p.id WHERE l.item_id=(SELECT id FROM inventory_items WHERE sku='MED-COT-01' AND deleted_at IS NULL) AND p.deleted_at IS NULL GROUP BY p.id,p.order_date ORDER BY p.order_date DESC,p.id DESC LIMIT 1) AND l.item_id=(SELECT id FROM inventory_items WHERE sku='MED-COT-01' AND deleted_at IS NULL) ORDER BY g.id,g.grn_number,g.received_date,g.status,l.uom_id,l.received_quantity LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-CASH-BUY-OPERATORS",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "List cash buy transactions from 2026-07-01 through 2026-09-30 by operator.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Operator names",
+          "physical currency-note handling"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT t.id,t.created_at,t.user_id,u.name operator,t.terminal_id,t.from_currency_code,t.to_currency_code,t.total_incoming_amount,t.total_payout_amount,t.fee_amount,t.commission_amount,t.status FROM money_exchange_transactions t LEFT JOIN core_users u ON u.id=t.user_id WHERE t.type='buy' AND t.status='completed' AND t.deleted_at IS NULL AND t.created_at>='2026-06-30 18:30:00' AND t.created_at<'2026-09-30 18:30:00' ORDER BY t.id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT l.transaction_id,l.currency_code,SUM(l.denomination_value*l.count) incoming_note_face_value FROM money_exchange_transaction_items l JOIN money_exchange_transactions t ON t.id=l.transaction_id WHERE t.type='buy' AND t.status='completed' AND t.deleted_at IS NULL AND t.created_at>='2026-06-30 18:30:00' AND t.created_at<'2026-09-30 18:30:00' GROUP BY l.transaction_id,l.currency_code ORDER BY l.transaction_id,l.currency_code LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-PROJECT-COST-LINKS",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "What fuel and maintenance costs were recorded for PRJ-2026-001 from 2026-07-01 through 2026-09-30?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "explicit project_id",
+          "overlapping allocations",
+          "not automatically charged"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,equipment_id,project_id,log_date,qty_consumed,unit_cost,total_cost,status FROM construction_fuel_logs WHERE project_id=(SELECT id FROM construction_projects WHERE project_code='PRJ-2026-001' AND deleted_at IS NULL) AND deleted_at IS NULL AND log_date BETWEEN '2026-07-01' AND '2026-09-30' ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-HISTORICAL-INVOICE-CANDIDATES",
+    "area": "additional_partial_repairs",
+    "turns": [
+      {
+        "question": "Show customer invoices overdue as of 2026-09-30.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "paid or voided",
+          "not a certified historical outstanding total"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,organization_id,invoice_number,party_id,currency_id,invoice_date,due_date,amount_due,amount_settled,status,amount_due-amount_settled outstanding_now FROM finance_invoices WHERE due_date<'2026-09-30' AND invoice_date<='2026-09-30' AND amount_due>0 AND type='ar' ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-RATE-EXACT-INSTANT",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "What was the USD-to-LKR rate at 2026-10-23 12:00 Asia/Colombo?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "06:30:00 UTC",
+          "CBSL importer",
+          "Buy and sell rates are separate"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT r.id,r.currency_id,r.buy_rate,r.sell_rate,r.effective_at,r.source FROM money_exchange_currency_rates r JOIN core_currencies c ON c.id=r.currency_id WHERE c.code='USD' AND c.deleted_at IS NULL AND r.deleted_at IS NULL AND r.effective_at<='2026-10-23 06:30:00' ORDER BY r.effective_at DESC,r.id DESC LIMIT 1",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "expected_status": "answered"
+      }
+    ]
+  },
+  {
+    "id": "P-PENDING-TILL-DISCREPANCIES",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "Which till operations are pending approval or reconciliation?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "Pending operations and nonzero closing-count differences",
+          "not an approval decision"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT id,entity_id,terminal_id,user_id,type,status,created_at FROM money_exchange_till_operations WHERE status='pending' AND deleted_at IS NULL ORDER BY id LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT t.id operation_id,t.terminal_id,t.status,l.currency_code,l.denomination_value,l.expected_count,l.physical_count,l.difference FROM money_exchange_till_operation_items l JOIN money_exchange_till_operations t ON t.id=l.till_operation_id WHERE t.type='close' AND t.deleted_at IS NULL AND l.difference!=0 ORDER BY t.id,t.terminal_id,t.status,l.currency_code,l.denomination_value,l.expected_count,l.physical_count,l.difference LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "P-TRANSFER-EXACT-REFERENCE",
+    "area": "money_exchange",
+    "turns": [
+      {
+        "question": "Reconcile Money Exchange internal transfer reference TRF-2026-1899 across its source and destination till.",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "exact reference text",
+          "amount placeholder",
+          "Both Legs Match Transfer"
+        ],
+        "row_snapshots": [
+          {
+            "sql": "SELECT o.id operation_id,o.terminal_id,o.status,o.created_at,l.currency_code,l.denomination_value,l.physical_count,l.amount FROM money_exchange_till_operation_items l JOIN money_exchange_till_operations o ON o.id=l.till_operation_id JOIN money_exchange_internal_transfers x ON x.source_terminal_id=o.terminal_id AND x.currency_code=l.currency_code WHERE x.reference='TRF-2026-1899' AND x.deleted_at IS NULL AND o.type='float_out' AND o.note=CONCAT('Internal Transfer Out (Ref: ',x.reference,')') AND o.deleted_at IS NULL ORDER BY o.id,o.terminal_id,o.status,o.created_at,l.currency_code,l.denomination_value,l.physical_count,l.amount LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT o.id operation_id,o.terminal_id,o.status,o.created_at,l.currency_code,l.denomination_value,l.physical_count,l.amount FROM money_exchange_till_operation_items l JOIN money_exchange_till_operations o ON o.id=l.till_operation_id JOIN money_exchange_internal_transfers x ON x.destination_terminal_id=o.terminal_id AND x.currency_code=l.currency_code WHERE x.reference='TRF-2026-1899' AND x.deleted_at IS NULL AND o.type='float_in' AND o.note=CONCAT('Internal Transfer In (Ref: ',x.reference,')') AND o.deleted_at IS NULL ORDER BY o.id,o.terminal_id,o.status,o.created_at,l.currency_code,l.denomination_value,l.physical_count,l.amount LIMIT 500",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          },
+          {
+            "sql": "SELECT x.reference,x.currency_code,x.amount transfer_amount,v.source_out completed_source_out,v.destination_in completed_destination_in,(v.source_out=x.amount AND v.destination_in=x.amount) both_legs_match_transfer FROM money_exchange_internal_transfers x JOIN (SELECT x.id,SUM(CASE WHEN o.type='float_out' AND o.terminal_id=x.source_terminal_id AND o.note=CONCAT('Internal Transfer Out (Ref: ',x.reference,')') THEN l.amount END) source_out,SUM(CASE WHEN o.type='float_in' AND o.terminal_id=x.destination_terminal_id AND o.note=CONCAT('Internal Transfer In (Ref: ',x.reference,')') THEN l.amount END) destination_in FROM money_exchange_internal_transfers x JOIN money_exchange_till_operations o ON o.note IN (CONCAT('Internal Transfer Out (Ref: ',x.reference,')'),CONCAT('Internal Transfer In (Ref: ',x.reference,')')) JOIN money_exchange_till_operation_items l ON l.till_operation_id=o.id AND l.currency_code=x.currency_code WHERE x.reference='TRF-2026-1899' AND x.deleted_at IS NULL AND o.deleted_at IS NULL AND o.status='completed' GROUP BY x.id) v ON v.id=x.id WHERE x.reference='TRF-2026-1899' AND x.deleted_at IS NULL",
+            "tool": "rendered_data_page",
+            "rows_key": "rows",
+            "allow_truncated": true
+          }
+        ],
+        "expected_status": "answered"
+      }
+    ]
+  },
+  {
+    "id": "P-IPC-STORED-ARITHMETIC",
+    "area": "construction",
+    "turns": [
+      {
+        "question": "Show approved IPCs, amounts paid, and outstanding by subcontractor.",
+        "expected_status": "partial",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "contains": [
+          "differs from the recorded deduction arithmetic",
+          "not the amount outstanding after payments"
+        ],
+        "row_snapshot": {
+          "tool": "rendered_data_page",
+          "rows_key": "rows",
+          "sql": "SELECT id,project_id,subcontractor_id,ipc_no,period,billing_type,billing_date,certified_amount,retention_deduction,advance_deduction,net_payable,status,certified_amount-retention_deduction-advance_deduction net_after_recorded_deductions,net_payable-(certified_amount-retention_deduction-advance_deduction) stored_net_variance FROM construction_ipcs WHERE status='Approved' AND deleted_at IS NULL ORDER BY id LIMIT 500"
+        }
+      }
+    ]
+  }
+]

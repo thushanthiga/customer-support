@@ -1,0 +1,871 @@
+[
+  {
+    "id": "purchase_quantity",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "can I purchase 10 vitamin c",
+        "no_live_tools": true,
+        "unverified": true,
+        "contains": [
+          "customer sale",
+          "supplier purchase order"
+        ]
+      },
+      {
+        "question": "for supplier purchase order",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true
+      }
+    ]
+  },
+  {
+    "id": "purchase_units_typo",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "Can we buy 10 pieces of viatamin c?",
+        "no_live_tools": true,
+        "unverified": true,
+        "contains": [
+          "customer sale",
+          "supplier purchase order"
+        ]
+      },
+      {
+        "question": "for supplier purchase order",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true
+      }
+    ]
+  },
+  {
+    "id": "purchase_blocker",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "why i am not able to purchase 10 vitamin c",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "MED-COT-01",
+          "field": "max_stock_level"
+        }
+      }
+    ]
+  },
+  {
+    "id": "purchase_howto",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "How do I create a purchase order?",
+        "no_live_tools": true,
+        "contains": [
+          "Purchase Orders"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "receipt_howto",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "How do I receive goods against a purchase order?",
+        "no_live_tools": true,
+        "contains": [
+          "Goods Receipt"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "maximum_setting",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "maximum qty of vitamin c",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "MED-COT-01",
+          "field": "max_stock_level"
+        },
+        "excludes": [
+          "markdown|price list|promotion"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "minimum_setting",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "What is the minimum quantity for Vitamin C?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "MED-COT-01",
+          "field": "min_stock_level"
+        }
+      }
+    ]
+  },
+  {
+    "id": "item_switch_followup",
+    "area": "conversation",
+    "turns": [
+      {
+        "question": "what ia the maxmimum sell count of car toy",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "ELE-COT-44509",
+          "field": "max_stock_level"
+        }
+      },
+      {
+        "question": "for vitamin c",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "MED-COT-01",
+          "field": "max_stock_level"
+        },
+        "excludes": [
+          "markdown|promotion"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "operation_switch",
+    "area": "conversation",
+    "turns": [
+      {
+        "question": "Can I purchase 10 vitamin C from a supplier?",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true
+      },
+      {
+        "question": "Can I sell vitamin C instead?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true
+      }
+    ]
+  },
+  {
+    "id": "stock_spacing",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "Is i phone in stock?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "contains": [
+          "phone|iphone"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "stock_informal",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "Do we have 10 vitamin c?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "oracle": {
+          "sku": "MED-COT-01",
+          "field": "available"
+        }
+      }
+    ]
+  },
+  {
+    "id": "stock_named_warehouse",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "How many vitamin C pieces are available in Main warehouse 2?",
+        "tools_any": [
+          "get_item_stock_and_rules",
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "Main warehouse 2"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "unknown_item",
+    "area": "ambiguity",
+    "turns": [
+      {
+        "question": "Is SKU ZZ-NOT-A-REAL-ITEM-9843 in stock?",
+        "tools_any": [
+          "get_item_stock_and_rules",
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "couldn.t|no matching|no item|confirm|not found|not find|could not"
+        ],
+        "unverified": true
+      }
+    ]
+  },
+  {
+    "id": "missing_item",
+    "area": "ambiguity",
+    "turns": [
+      {
+        "question": "Is it in stock?",
+        "no_live_tools": true,
+        "contains": [
+          "which item|name or SKU"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "missing_variant_item",
+    "area": "ambiguity",
+    "turns": [
+      {
+        "question": "Which colors are available?",
+        "no_live_tools": true,
+        "contains": [
+          "item|product|SKU"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "variant_typo",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "Can you check if a size, color, or variant is available for i Phione?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "contains": [
+          "iphone|phone"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "supplier_history",
+    "area": "procurement",
+    "turns": [
+      {
+        "question": "toy car supplier details",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true,
+        "contains": [
+          "PO-|GRN-|history|recorded"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "supplier_followup",
+    "area": "conversation",
+    "turns": [
+      {
+        "question": "toy car supplier details",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true
+      },
+      {
+        "question": "for vitamin c",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true,
+        "contains": [
+          "vitamin|MED-COT-01"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "supplier_without",
+    "area": "concepts",
+    "turns": [
+      {
+        "question": "is it possible to have items woithout the supplier",
+        "no_live_tools": true,
+        "contains": [
+          "supplier"
+        ],
+        "excludes": [
+          "matching catalog item"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "supplier_multiple",
+    "area": "concepts",
+    "turns": [
+      {
+        "question": "Can two suppliers supply the same item on separate purchase orders?",
+        "no_live_tools": true,
+        "contains": [
+          "supplier"
+        ],
+        "excludes": [
+          "matching catalog item"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "supplier_single_po",
+    "area": "concepts",
+    "turns": [
+      {
+        "question": "Can one PO have two suppliers?",
+        "no_live_tools": true,
+        "contains": [
+          "supplier"
+        ],
+        "excludes": [
+          "matching catalog item"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "pos_provenance",
+    "area": "concepts",
+    "turns": [
+      {
+        "question": "Does seeing an item in POS prove we purchased it from a supplier?",
+        "no_live_tools": true,
+        "contains": [
+          "does not prove|doesn.t prove|not proof"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "minimum_definition",
+    "area": "concepts",
+    "turns": [
+      {
+        "question": "what is item master minimum",
+        "no_live_tools": true,
+        "contains": [
+          "threshold|Min Qty"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "category_typo",
+    "area": "navigation",
+    "turns": [
+      {
+        "question": "where can i add the catogory",
+        "no_live_tools": true,
+        "contains": [
+          "Inventory.{0,20}Catalog.{0,20}Categories",
+          "Add Category",
+          "Create Category"
+        ],
+        "excludes": [
+          "Catalog.{0,15}Items"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "category_navigation",
+    "area": "navigation",
+    "turns": [
+      {
+        "question": "Where is the category screen?",
+        "no_live_tools": true,
+        "contains": [
+          "Catalog.{0,20}Categories"
+        ],
+        "excludes": [
+          "Catalog.{0,15}Items"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warehouse_navigation",
+    "area": "navigation",
+    "turns": [
+      {
+        "question": "how can i see wherehouse",
+        "no_live_tools": true,
+        "contains": [
+          "Core.{0,20}Resources.{0,20}Warehouses"
+        ],
+        "excludes": [
+          "18|record.s."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "terminal_navigation",
+    "area": "navigation",
+    "turns": [
+      {
+        "question": "where can I see the terminal",
+        "no_live_tools": true,
+        "contains": [
+          "Terminals|Terminal Sessions"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "invoice_navigation",
+    "area": "navigation",
+    "turns": [
+      {
+        "question": "where is invoice",
+        "no_live_tools": true,
+        "contains": [
+          "Invoices"
+        ],
+        "excludes": [
+          "live tenant data"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warehouse_list",
+    "area": "core",
+    "turns": [
+      {
+        "question": "list down the stores and locations",
+        "tools_any": [
+          "get_warehouses_list"
+        ],
+        "evidence": true,
+        "contains": [
+          "Main warehouse 2"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warehouse_count",
+    "area": "core",
+    "turns": [
+      {
+        "question": "How many active warehouses do we have?",
+        "tools_any": [
+          "get_warehouses_list"
+        ],
+        "evidence": true,
+        "contains": [
+          "18|active"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "below_minimum",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List all items with available stock below the item master minimum",
+        "tools_any": [
+          "get_items_below_minimum_stock"
+        ],
+        "evidence": true,
+        "contains": [
+          "minimum|min_stock_level"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "below_reorder",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "List items with available stock below their reorder point",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "excludes": [
+          "item-master minimum|item master minimum"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "customer_count",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "How many active customers do we have?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "customer"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "active_items",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "Count active catalog items",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "active"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "finance_navigation",
+    "area": "finance",
+    "turns": [
+      {
+        "question": "Where can I view bank accounts?",
+        "no_live_tools": true,
+        "contains": [
+          "Bank Accounts"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "hr_navigation",
+    "area": "hr",
+    "turns": [
+      {
+        "question": "Where can I view employees?",
+        "no_live_tools": true,
+        "contains": [
+          "Employees"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "crm_navigation",
+    "area": "crm",
+    "turns": [
+      {
+        "question": "Where can I view leads?",
+        "no_live_tools": true,
+        "contains": [
+          "Leads"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "jewelry_navigation",
+    "area": "jewelry",
+    "turns": [
+      {
+        "question": "Where can I view jewelry items?",
+        "no_live_tools": true,
+        "contains": [
+          "Jewelry"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "sales_growth",
+    "area": "reporting",
+    "turns": [
+      {
+        "question": "Compare sales growth this month to last month",
+        "tools_any": [
+          "get_sales_growth"
+        ],
+        "evidence": true,
+        "contains": [
+          "sales|growth|period"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "warehouse_switch",
+    "area": "conversation",
+    "turns": [
+      {
+        "question": "How many warehouses do we have?",
+        "tools_any": [
+          "get_warehouses_list"
+        ],
+        "evidence": true
+      },
+      {
+        "question": "Where do I manage warehouses and branches?",
+        "no_live_tools": true,
+        "contains": [
+          "Resources.{0,20}Warehouses"
+        ],
+        "excludes": [
+          "record.s."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "schema_status",
+    "area": "cross_module",
+    "turns": [
+      {
+        "question": "How many active employees do we have?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "employee"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "no_supplier_injection",
+    "area": "failures",
+    "turns": [
+      {
+        "question": "Toy Car supplier details",
+        "tools_any": [
+          "diagnose_purchase_order_item"
+        ],
+        "evidence": true,
+        "unverified": true,
+        "contains": [
+          "couldn.t|failed"
+        ],
+        "excludes": [
+          "no supplier was found"
+        ]
+      }
+    ],
+    "inject": {
+      "diagnose_purchase_order_item": {
+        "error": "Injected database unavailable"
+      }
+    }
+  },
+  {
+    "id": "no_stock_injection",
+    "area": "failures",
+    "turns": [
+      {
+        "question": "Is Vitamin C in stock?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "unverified": true,
+        "contains": [
+          "couldn.t|failed"
+        ],
+        "excludes": [
+          "0 stock|out of stock"
+        ]
+      }
+    ],
+    "inject": {
+      "get_item_stock_and_rules": {
+        "error": "Injected database unavailable"
+      }
+    }
+  },
+  {
+    "id": "generic_failure",
+    "area": "failures",
+    "turns": [
+      {
+        "question": "How many active customers do we have?",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "unverified": true,
+        "contains": [
+          "couldn.t|failed"
+        ],
+        "excludes": [
+          "0 active customers|no customers"
+        ]
+      }
+    ],
+    "inject": {
+      "query_business_data": {
+        "error": "Injected database unavailable"
+      }
+    }
+  },
+  {
+    "id": "truncated_result",
+    "area": "failures",
+    "turns": [
+      {
+        "question": "List active customers",
+        "tools_any": [
+          "query_business_data"
+        ],
+        "evidence": true,
+        "contains": [
+          "limit|complete|more records"
+        ],
+        "excludes": [
+          "all customers are listed"
+        ]
+      }
+    ],
+    "inject": {
+      "query_business_data": {
+        "truncated": true,
+        "results": [
+          {
+            "first_name": "Example"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "id": "customer_sale_clarification",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "can i buy 10 water bottle",
+        "no_live_tools": true,
+        "unverified": true,
+        "contains": [
+          "customer sale",
+          "supplier purchase order"
+        ]
+      },
+      {
+        "question": "for customer sale",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "contains": [
+          "water bottle",
+          "10"
+        ],
+        "excludes": [
+          "purchase order"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "watch_plural_sale",
+    "area": "sales",
+    "turns": [
+      {
+        "question": "Can I sell 20 watches to a single customer?",
+        "tools_any": [
+          "get_item_stock_and_rules"
+        ],
+        "evidence": true,
+        "unverified": true,
+        "contains": [
+          "name or SKU|which one|confirm"
+        ],
+        "excludes": [
+          "Load Test Item|LD-3894|Yes"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "master_maximum_typo",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "is there any mster maximum quantity",
+        "tools_any": [
+          "get_item_master_threshold_summary"
+        ],
+        "evidence": false,
+        "contains": [
+          "Max Qty",
+          "Min Qty"
+        ],
+        "excludes": [
+          "exact item name|match.*catalog"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "below_maximum",
+    "area": "inventory",
+    "turns": [
+      {
+        "question": "list down all the items with stock quantity lesser than their item master maximumquantity",
+        "tools_any": [
+          "get_items_below_maximum_stock"
+        ],
+        "evidence": true,
+        "contains": [
+          "maximum"
+        ]
+      }
+    ]
+  }
+]

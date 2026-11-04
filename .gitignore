@@ -1,0 +1,22 @@
+# Generated diagnostics can contain tenant business results. They are not runtime inputs.
+/QA/*.json
+!/QA/payroll-bom-fixtures.json
+/QA/*.jsonl
+/QA/*.csv
+/QA/*.zip
+/evaluation-results/*.json
+/evaluation-results/*.jsonl
+
+# Runtime state and compiled caches belong to the deployment environment.
+**/__pycache__/
+**/*.py[cod]
+/api/venv/
+/api/.env
+/api/db.sqlite3*
+/ui/.next/
+/ui/node_modules/
+**/*.tsbuildinfo
+
+.DS_Store
+**/.DS_Store
+
