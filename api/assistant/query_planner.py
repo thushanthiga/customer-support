@@ -62,6 +62,8 @@ PLAN = {
                 "additionalProperties": False,
             },
         },
+        "filter_logic": {"enum": ["AND", "OR"]},
+        "having_logic": {"enum": ["AND", "OR"]},
         "filters": {
             "type": "array",
             "items": {
@@ -154,7 +156,7 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
         instructions += "\nThe requested table schemas have now been supplied. Return plans for their supported fields, or a precise clarification/missing_capability. Do not request schema_tables in this planning step."
     messages = [
         {"role": "system", "content": instructions + "\nAVAILABLE SCHEMA:\n" + schema + "\nOUTPUT JSON SCHEMA:\n" + json.dumps(output)},
-        {"role": "user", "content": json.dumps({"question": question, "previous_questions": list(history)[-5:]}, default=str)},
+        {"role": "user", "content": json.dumps({"question": question, "previous_questions": list(history)[-5:], "validation_feedback": list(failures)[-8:]}, default=str)},
     ]
     response = client.chat.completions.create(
         model=CHAT_MODEL,

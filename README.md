@@ -152,3 +152,40 @@ The runtime caches schema metadata for ten minutes and reuses database
 connections. It reads business results from the connected database on each
 query. `api/db.sqlite3` persists chat/session/document data; `ui/.next/` is the
 compiled Next.js cache. Neither is an evaluation-answer cache.
+
+## Grounded support and analytics
+
+The current business engine routes record questions to live, tenant-scoped queries,
+workflow questions to retrieved documentation, and mixed questions to both sources.
+Business values and result tables are rendered directly from validated query results;
+they are not rewritten by a second model call. Missing values remain unknown, empty
+results are scoped to the executed query, and response metadata does not claim a
+100% correctness score. Unsupported parts are explicitly marked as partial.
+
+Large source datasets are aggregated inside MySQL using validated SELECT plans.
+Counts, sums, averages, date groups, arithmetic and HAVING conditions operate over
+the matching source rows before the output page limit. Each response page is capped
+at 500 rows, exposes all returned rows, and retains continuation state for each
+result. Existing database statement timeouts still apply. This is not a new Google
+BigQuery connector, distributed warehouse, unlimited export or asynchronous job
+system. Unsupported window functions and cross-result comparisons are reported
+rather than approximated from a page of rows. Large production workloads still
+require representative load tests and appropriate database indexes.
+
+Query retries now receive compiler validation feedback. The planner is instructed
+to preserve dates, predicates, currencies and units, avoid multiplied totals from
+joins, and request missing context instead of choosing an arbitrary interpretation.
+These safeguards reduce specific failure modes; they do not guarantee perfect
+natural-language interpretation or hallucination-free documentation prose.
+
+Run the current-engine regression coverage without model/database calls:
+
+```sh
+cd api
+SUPPORT_DISABLE_MODEL_CALLS=true ./venv/bin/python manage.py test assistant.tests.test_reliable_support --noinput
+```
+
+On 2026-11-04, all 16 new regression tests passed. The full historical suite had
+8 failures and 23 errors both before and after this change, including references
+to removed modules and older database mocks. Production data correctness and
+throughput have not been certified by these offline tests.

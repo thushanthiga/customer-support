@@ -628,11 +628,9 @@ def query_business_data(
                     if aggregate != "COUNT":
                         raise ValueError("distinct is supported only with COUNT.")
                     expression = f"COUNT(DISTINCT {expression})"
-                elif aggregate in {"SUM", "COUNT"}:
-                    expression = f"COALESCE({aggregate}({expression}), 0)"
                 else:
                     expression = f"{aggregate}({expression})"
-            elif "coalesce" in item or (reference_tables.get(item.get("table")) == "inventory_item_replenishment_rules" and item.get("column") == "min_stock_level"):
+            elif "coalesce" in item:
                 coalesce_val = item.get("coalesce", 0)
                 expression = f"COALESCE({expression}, {bind(coalesce_val)})"
             alias = item.get("alias") or f"field_{index}"
@@ -643,16 +641,7 @@ def query_business_data(
 
         where_parts = []
         calendar_filters = []
-        raw_filters = query_plan.get("filters") or []
-        has_min_stock_comparison = any(
-            isinstance(h.get("value"), dict) and h.get("value", {}).get("alias") in ("minimum_quantity", "min_stock_level", "min_quantity")
-            for h in (query_plan.get("having") or [])
-        )
-        filters = []
-        for f in raw_filters:
-            if has_min_stock_comparison and f.get("column") == "min_stock_level" and f.get("operator") == "IS NOT NULL":
-                continue
-            filters.append(f)
+        filters = query_plan.get("filters") or []
         if len(filters) > _MAX_FILTERS:
             raise ValueError(f"A query can use at most {_MAX_FILTERS} filters.")
         for condition in filters:
