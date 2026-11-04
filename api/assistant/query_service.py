@@ -16,6 +16,8 @@ import time
 
 from django.utils import timezone
 
+from .query_integrity import trusted_relationships, validate_aggregate_grain
+
 from .db_service import (
     _serialize_decimals,
     get_tenant_connection,
@@ -219,6 +221,17 @@ def _schema_for(tenant_db: str):
             relationships.add((left, row["COLUMN_NAME"], right, row["REFERENCED_COLUMN_NAME"]))
     declared_relationships = set(relationships)
     relationships.update(_infer_schema_relationships(tables))
+    from django.conf import settings
+    from .domain_schema import CORE_APPLICATION_RELATIONSHIPS
+    application_relationships = set()
+    all_app_mappings = list(CORE_APPLICATION_RELATIONSHIPS) + list(getattr(settings, "SUPPORT_APPLICATION_RELATIONSHIPS", []))
+    for mapping in all_app_mappings:
+        if not isinstance(mapping, dict) or not mapping.get("source"):
+            raise ValueError("Application relationship mappings require a source reference.")
+        edge = tuple(mapping.get(key) for key in ("left_table", "left_column", "right_table", "right_column"))
+        if len(edge) == 4 and edge[0] in tables and edge[2] in tables and edge[1] in tables[edge[0]] and edge[3] in tables[edge[2]]:
+            application_relationships.add(edge)
+    relationships.update(application_relationships)
     indexes = {}
     incomplete_indexes = set()
     for row in index_rows:
@@ -239,6 +252,7 @@ def _schema_for(tenant_db: str):
         "column_constraints": column_constraints,
         "indexes": indexes,
         "declared_relationships": declared_relationships,
+        "application_relationships": application_relationships,
     }
     with _SCHEMA_CACHE_LOCK:
         _SCHEMA_CACHE[tenant_db] = (now, schema)
@@ -355,6 +369,11 @@ def _relevant_tables(schema, question: str, limit: int = 20):
     if any(w in expanded for w in ["accounting", "account", "accounts", "journal", "gl", "ledger", "debit", "credit"]):
         expanded.update(["chart", "accounts", "journal", "entries", "lines", "fin"])
 
+    from .domain_schema import CONCEPT_KEYWORD_EXPANSIONS, SYSTEM_TABLE_PREFIXES
+    for kw, terms in CONCEPT_KEYWORD_EXPANSIONS.items():
+        if kw in expanded:
+            expanded.update(terms)
+
     q_lower = (question or "").lower()
     scores = []
     for table, columns in schema["tables"].items():
@@ -372,6 +391,9 @@ def _relevant_tables(schema, question: str, limit: int = 20):
         # Deprioritize unrelated specialist verticals unless specifically requested
         if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_", "manufacturing_")) and not any(k in q_lower for k in ("jewelry", "gold", "silver", "karigar", "money", "exchange", "currency", "construction", "boq", "mrp", "work order", "production order")):
             score -= 12
+        # Suppress internal template/system tables unless explicitly requested
+        if any(table.startswith(p) for p in SYSTEM_TABLE_PREFIXES) and not any(k in q_lower for k in ("template", "printable", "print")):
+            score -= 20
         if score > 0:
             scores.append((score, table))
 
@@ -548,11 +570,12 @@ def query_business_data(
                 raise ValueError("The requested join references an unavailable column.")
             edge = (left_actual, left_column, table, right_column)
             reverse = (table, right_column, left_actual, left_column)
-            if edge not in schema["relationships"] and reverse not in schema["relationships"]:
+            verified_edges = trusted_relationships(schema)
+            if edge not in verified_edges and reverse not in verified_edges:
                 alternatives = sorted(
                     [
                         relation
-                        for relation in schema["relationships"]
+                        for relation in verified_edges
                         if relation[0] in {left_actual, table} or relation[2] in {left_actual, table}
                     ],
                     key=lambda relation: (not ({relation[0], relation[2]} == {left_actual, table}), relation),
@@ -582,7 +605,10 @@ def query_business_data(
                 key = f"join_type_{index}"
                 join_params[key] = _STOCK_DOCUMENT_TYPES[document_table]
                 join_sql[-1] += f" AND {aliases[ledger_ref]}.`reference_type` = %({key})s"
-            executed_joins.append({**join, "type": join_type, "relationship_source": "database_schema"})
+            executed_joins.append({**join, "type": join_type, "relationship_source": (
+                "database_constraint" if edge in schema.get("declared_relationships", set()) or reverse in schema.get("declared_relationships", set())
+                else "configured_application_mapping"
+            )})
             joined.add(reference)
             reference_tables[reference] = table
 
@@ -644,6 +670,7 @@ def query_business_data(
         selections = query_plan.get("select") or []
         if not selections or len(selections) > _MAX_SELECTS:
             raise ValueError(f"Select between 1 and {_MAX_SELECTS} fields.")
+        aggregation_grains = validate_aggregate_grain(query_plan, schema, reference_tables)
         select_sql, output_names = [], set()
         for index, item in enumerate(selections, start=1):
             expression, data_type = validate_field(item)
@@ -730,7 +757,7 @@ def query_business_data(
         for group in groups:
             expression, _ = validate_field(group)
             group_sql.append(expression)
-        if any(item.get("aggregate") for item in selections):
+        if groups or any(item.get("aggregate") for item in selections):
             def group_key(field):
                 return (
                     field.get("table"),
@@ -879,6 +906,7 @@ def query_business_data(
             "mcp_read_at": mcp_res.get("read_at"),
             "query_audit": {
                 "base_table": base,
+                "aggregation_grains": aggregation_grains,
                 "joined_tables": [join.get("table") for join in joins],
                 "joins": executed_joins,
                 "table_references": reference_tables,

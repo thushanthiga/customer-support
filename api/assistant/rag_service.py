@@ -116,9 +116,7 @@ def retrieve_relevant_chunks(
     Returns:
         (formatted_context_str, list_of_reference_metadata)
     """
-    from .chunking_service import ensure_default_document_indexed
-
-    active_doc = UploadedDocument.objects.filter(is_active=True).first() or ensure_default_document_indexed()
+    active_doc = UploadedDocument.objects.filter(is_active=True).first()
     if not active_doc:
         return "", []
 
@@ -160,6 +158,9 @@ def retrieve_relevant_chunks(
         formatted_context_pieces.append(f"### [Section: {hierarchy_str}]\n{chunk.content}")
         references.append({
             "chunk_id": chunk.id,
+            "document_id": active_doc.id,
+            "source_id": f"doc-{active_doc.id}-chunk-{chunk.id}",
+            "source_text": chunk.content,
             "document_title": active_doc.title,
             "section_title": chunk.section_title,
             "hierarchy": chunk.section_hierarchy,
@@ -190,9 +191,7 @@ def retrieve_navigation_chunks(query: str, top_k: int = 5) -> Tuple[str, List[Di
     if not subject_terms:
         return retrieve_relevant_chunks(query, top_k=top_k)
 
-    from .chunking_service import ensure_default_document_indexed
-
-    active_doc = UploadedDocument.objects.filter(is_active=True).first() or ensure_default_document_indexed()
+    active_doc = UploadedDocument.objects.filter(is_active=True).first()
     if not active_doc:
         return "", []
 
@@ -217,6 +216,9 @@ def retrieve_navigation_chunks(query: str, top_k: int = 5) -> Tuple[str, List[Di
         context_pieces.append(f"### [Navigation section: {hierarchy}]\n{chunk.content}")
         references.append({
             "chunk_id": chunk.id,
+            "document_id": active_doc.id,
+            "source_id": f"doc-{active_doc.id}-chunk-{chunk.id}",
+            "source_text": chunk.content,
             "document_title": active_doc.title,
             "section_title": chunk.section_title,
             "hierarchy": chunk.section_hierarchy,

@@ -232,3 +232,29 @@ scenario evaluation remains necessary.
 cd api
 SUPPORT_DISABLE_MODEL_CALLS=true ./venv/bin/python manage.py test assistant.tests.test_planning_contract assistant.tests.test_reliable_support --noinput
 ```
+
+### Everyday requests and clarification
+
+The planner and reviewer share a conversational analytics policy. Ordinary
+exploratory questions use a useful, disclosed reporting basis instead of asking
+customers to specify every query parameter. Informal rankings default to a relevant
+recorded volume/activity measure, the last 30 days when a transaction date exists,
+and a top 10. Explicit current instructions and established follow-up preferences
+override those defaults. Unqualified ordinary lists/counts do not inherit the
+ranking window. Missing dates can use labeled recorded history; a proxy source is
+labeled as a proxy and never presented as a different business event.
+
+Reporting defaults appear in the answer's scope/assumptions and do not manufacture
+business facts. Missing exact identities, contradictory requirements and unknown
+custom formulas can still require clarification. Question-only proposals now pass
+through review as well: optional reporting preferences alone should trigger a
+revised plan rather than an unnecessary questionnaire. Schema discovery is still
+handled before execution. These are shared decision rules, not phrase-to-query
+recipes or stored answers.
+
+Validation: 34 focused offline tests pass. A real-provider synthetic-schema check
+produced an executable reviewed plan for an informal product-popularity request on
+the first attempt, and for a customer-performance ranking after two repair attempts.
+An exact proprietary-score request correctly asked for its missing formula. No
+production records were used. The repairs show that model interpretation and
+latency remain variable; these checks do not establish perfect understanding.

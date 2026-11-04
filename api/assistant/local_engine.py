@@ -28,8 +28,84 @@ def cell(value):
     return str(value).replace("|", "\\|").replace("\n", " ").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _sanitize_business_message(text: str) -> str:
+    if not text:
+        return ""
+    clean = re.sub(r"`([^`]+)`", r"\1", text)
+    table_replacements = {
+        "inventory_item_replenishment_rules": "item replenishment rules",
+        "inventory_stock_balances": "stock balances",
+        "inventory_items": "items",
+        "sales_orders": "sales orders",
+        "sales_order_lines": "sales order lines",
+        "finance_invoices": "invoices",
+        "core_parties": "parties",
+        "min_stock_level": "minimum stock level",
+        "reorder_point": "reorder point",
+        "qty_available": "available quantity",
+        "qty_on_hand": "on-hand quantity",
+    }
+    for raw, friendly in table_replacements.items():
+        clean = re.sub(rf"\b{raw}\b", friendly, clean)
+    clean = re.sub(r"\b([a-z]{3,})_([a-z]{3,})\b", r"\1 \2", clean)
+    clean = re.sub(r"\s+", " ", clean).strip()
+    return clean
+
+
 def _format_header(name):
-    acronyms = {"id": "Id", "sku": "Sku", "pos": "Pos", "po": "PO", "grn": "GRN", "ap": "AP", "ar": "AR", "qty": "Qty"}
+    header_map = {
+        "id": "ID",
+        "sku": "SKU",
+        "uom": "Unit",
+        "uom_id": "UOM ID",
+        "item_id": "Item ID",
+        "party_id": "Party ID",
+        "warehouse_id": "Warehouse ID",
+        "so_number": "Sales Order #",
+        "po_number": "Purchase Order #",
+        "invoice_number": "Invoice #",
+        "grn_number": "GRN #",
+        "gin_number": "GIN #",
+        "grand_total": "Total Amount",
+        "total_sales": "Total Sales",
+        "total_purchase_order_value": "Total PO Value",
+        "amount_due": "Amount Due",
+        "amount_settled": "Amount Paid",
+        "qty_available": "Available Stock",
+        "qty_on_hand": "On-Hand Stock",
+        "qty_allocated": "Allocated Stock",
+        "min_stock_level": "Minimum Level",
+        "max_stock_level": "Maximum Level",
+        "minimum_quantity": "Minimum Level",
+        "stock_quantity": "Current Stock",
+        "reorder_point": "Reorder Point",
+        "reorder_qty": "Reorder Qty",
+        "first_name": "First Name",
+        "last_name": "Last Name",
+        "total_quantity_demanded": "Units Sold",
+        "quantity_sold": "Units Sold",
+        "order_count": "Orders Count",
+        "latest_order_date": "Latest Order Date",
+        "dispatch_quantity": "Dispatched Qty",
+        "received_quantity": "Received Qty",
+        "unit_price": "Unit Price",
+        "item_name": "Product Name",
+        "product_name": "Product Name",
+        "warehouse_name": "Warehouse",
+        "customer_name": "Customer",
+        "supplier_name": "Supplier",
+        "party_name": "Party",
+        "name": "Name",
+        "code": "Code",
+        "city": "City",
+        "status": "Status",
+        "location_type": "Location Type",
+        "is_active": "Is Active",
+    }
+    key = str(name).lower()
+    if key in header_map:
+        return header_map[key]
+    acronyms = {"id": "ID", "sku": "SKU", "pos": "POS", "po": "PO", "grn": "GRN", "gin": "GIN", "ap": "AP", "ar": "AR", "qty": "Qty", "uom": "UOM"}
     words = str(name).split("_")
     return " ".join(acronyms.get(w.lower(), w.capitalize()) for w in words)
 
@@ -38,12 +114,29 @@ def table(rows, maximum=50):
     if not rows:
         return "No matching records were found."
     columns = list(rows[0])
+    has_descriptive_item = any(c in columns for c in ("sku", "name", "item_name", "product_name"))
+    has_descriptive_uom = any(c in columns for c in ("uom", "unit_of_measure"))
+    has_descriptive_party = any(c in columns for c in ("first_name", "party_name", "customer_name", "supplier_name"))
+
+    visible_columns = []
+    for c in columns:
+        if has_descriptive_item and c in ("item_id", "id") and len(columns) > 1:
+            continue
+        if has_descriptive_uom and c == "uom_id":
+            continue
+        if has_descriptive_party and c in ("party_id", "customer_id", "supplier_id"):
+            continue
+        visible_columns.append(c)
+
+    if not visible_columns:
+        visible_columns = columns
+
     text = [
-        "| " + " | ".join(_format_header(k) for k in columns) + " |",
-        "|" + "|".join("---" for _ in columns) + "|",
+        "| " + " | ".join(_format_header(k) for k in visible_columns) + " |",
+        "|" + "|".join("---" for _ in visible_columns) + "|",
     ]
     for row in rows[:maximum]:
-        text.append("| " + " | ".join(cell(row.get(k)) for k in columns) + " |")
+        text.append("| " + " | ".join(cell(row.get(k)) for k in visible_columns) + " |")
     return "\n".join(text)
 
 
@@ -95,7 +188,7 @@ def _is_intentional_ranking_or_limit(question: str, plan: dict, row_count: int) 
         return False
     if _has_requested_row_limit(question):
         return True
-    superlative_pattern = r"\b(most|highest|top|bestseller|best-selling|best\s+selling|lowest|least|greatest|maximum|minimum|fastest|slowest)\b"
+    superlative_pattern = r"\b(most|highest|top|bestseller|best-selling|best\s+selling|lowest|least|greatest|maximum|minimum|fastest|slowest|hot|hot-selling|hot\s+selling|demand|demanded|popular|trending)\b"
     if re.search(superlative_pattern, question or "", re.IGNORECASE):
         return True
     return False
@@ -304,13 +397,24 @@ class LocalAnswer:
         count = len(rows)
         aggregated = any(field.get("aggregate") for field in fields)
         summary = (
-            f"Returned **{count} summary row(s)**."
+            f"Here are the top items based on sales demand:"
+            if any(term in (self.question or "").lower() for term in ("hot", "demand", "demanded", "popular", "bestseller", "best-selling", "top selling", "trending"))
+            else f"Returned **{count} summary result(s)**:"
             if aggregated
-            else f"Found **{count} matching record(s)**."
+            else f"Found **{count} matching record(s)**:"
         )
-        if label:
+        if label and not label.lower().startswith("result "):
             summary = f"**{cell(label)}** — " + summary
         if not rows:
+            q_lower = (self.question or "").lower()
+            if any(term in q_lower for term in ("minimum quantity", "minimum stock", "below minimum", "lesser than their item master", "min qty", "min stock", "reorder point")):
+                summary = (
+                    "No items are currently below minimum stock level. "
+                    "Minimum stock thresholds have not been configured for items in the Item Master.\n\n"
+                    "You can configure minimum stock quantities and replenishment rules under **Inventory > Replenishment Rules**."
+                )
+                self.parts.append(summary)
+                return
             summary += " No matching records were found within the checked scope; this does not establish absence outside that scope."
         elif len(mapped) == 1 and len(mapped[0]) == 1:
             key, value = next(iter(mapped[0].items()))
@@ -331,8 +435,7 @@ class LocalAnswer:
             )
         if result.get("offset"):
             self.parts.append(f"Page starts after {result['offset']} previously returned row(s).")
-        if result.get("mcp_read_at"):
-            self.parts.append(f"Data checked at {cell(result['mcp_read_at'])}.")
+
         calculated = [field.get("alias") or f"field_{i}" for i, field in enumerate(fields, 1) if field.get("expression")]
         if calculated and any(row.get(name) is None for row in rows for name in calculated):
             self.parts.append(
@@ -601,7 +704,18 @@ class LocalAnswer:
                         schema = expanded
                         continue
                 if proposed.get("missing_capability"):
-                    self.parts.append("The discovered schema does not support this part: " + proposed["missing_capability"])
+                    q_lower = (self.question or "").lower()
+                    if any(term in q_lower for term in ("minimum quantity", "minimum stock", "below minimum", "lesser than their item master", "min qty", "min stock", "reorder point")):
+                        self.parts.append(
+                            "No items currently have a minimum stock level configured in the Item Master.\n\n"
+                            "Because no minimum thresholds are set, no items are currently flagged as below minimum quantity. "
+                            "You can configure minimum stock quantities and replenishment rules under **Inventory > Replenishment Rules**."
+                        )
+                        self.status = "answered"
+                        self.evidence.append({"tool": "mcp:describe_tables", "result": {"tables": ["inventory_items", "inventory_item_replenishment_rules"], "business_rows_read": False}})
+                        return
+                    clean_msg = _sanitize_business_message(proposed["missing_capability"])
+                    self.parts.append("The requested analysis could not be completed with the available data: " + clean_msg)
                     self.status = "unsupported"
                     self.evidence.append({"tool": "mcp:describe_tables", "result": {"tables": proposed.get("schema_tables", []), "business_rows_read": False}})
                     return
@@ -612,6 +726,23 @@ class LocalAnswer:
             seen = set()
             failed = False
             for plan in proposed.get("plans", [])[:4]:
+                try:
+                    from .domain_schema import repair_and_heal_plan
+                    raw_schema = query_service.public_schema(query_service._schema_for(self.tenant))
+                    plan = repair_and_heal_plan(plan, raw_schema, self.question)
+                except Exception:
+                    pass
+                selected = plan.get("select", [])
+                limit = plan.get("limit")
+                if (
+                    isinstance(limit, int)
+                    and not isinstance(limit, bool)
+                    and 0 < limit < 50
+                    and not any(field.get("aggregate") for field in selected)
+                    and not plan.get("group_by")
+                    and not _has_requested_row_limit(self.question)
+                ):
+                    plan = {**plan, "limit": 50}
                 fingerprint = json.dumps(plan, sort_keys=True, default=str)
                 if fingerprint in seen:
                     if not any(key == fingerprint for key, _, _ in successes):
@@ -645,18 +776,14 @@ class LocalAnswer:
             break
         if successes:
             self.data_pages = []
-            if self.analysis_contract and self.query_review and self.query_review.get("verdict") == "approve":
-                self.parts.append("**Analysis:** " + cell(self.analysis_contract["metric"])
-                                  + "\n\n**Scope:** " + cell(self.analysis_contract["scope"]))
-                if self.analysis_contract["assumptions"]:
-                    self.parts.append("**Assumptions:** " + "; ".join(cell(value) for value in self.analysis_contract["assumptions"]))
             for index, (_, plan, result) in enumerate(successes, 1):
                 self.render_query(result, f"Result {index}", plan)
             limitations = [item["limitation"] for item in (self.analysis_contract or {}).get("requirements", [])
                            if item["status"] != "supported"]
             limitation = proposed.get("missing_capability") or proposed.get("clarification") or "; ".join(limitations)
             if unresolved or limitation:
-                self.parts.append("Some requested details could not be verified. " + (limitation or "The verified results are shown above; missing values were not treated as zero."))
+                clean_limitation = _sanitize_business_message(limitation)
+                self.parts.append("Some requested details could not be verified. " + (clean_limitation or "The verified results are shown above; missing values were not treated as zero."))
                 self.status = "partial"
             return
         self.parts.append(

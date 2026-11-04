@@ -72,6 +72,31 @@ class PlanningContractTests(SimpleTestCase):
         self.assertEqual(result['analysis_contract']['requirements'][0]['plan_indexes'], [])
 
     @patch('assistant.query_planner.client.chat.completions.create')
+    def test_optional_reporting_preferences_cannot_bypass_review(self, provider):
+        candidate = proposal()
+        candidate['plans'] = []
+        candidate['clarification'] = 'Which metric and period?'
+        candidate['analysis_contract']['requirements'][0].update(
+            status='needs_clarification', plan_indexes=[], limitation='Metric and period omitted')
+        provider.side_effect = [reply(candidate), reply({
+            'verdict': 'revise', 'issues': ['Use a disclosed conventional reporting basis; these preferences do not block useful analysis.'],
+            'clarification': '',
+        })]
+        with self.assertRaisesRegex(PlanningValidationError, 'disclosed conventional'):
+            plan_question('Show the leading products', 'verified schema')
+        self.assertEqual(provider.call_count, 2)
+
+    @patch('assistant.query_planner.client.chat.completions.create')
+    def test_disclosed_defaults_are_not_blocking_ambiguities(self, provider):
+        candidate = proposal()
+        candidate['analysis_contract']['assumptions'] = ['Use recorded activity as the exploratory measure.']
+        provider.side_effect = [reply(candidate), reply(APPROVED)]
+        result = plan_question('Show overall activity', 'verified schema')
+        self.assertTrue(result['plans'])
+        self.assertNotIn('clarification', result)
+        self.assertEqual(result['analysis_contract']['ambiguities'], [])
+
+    @patch('assistant.query_planner.client.chat.completions.create')
     def test_invalid_schema_and_coverage_never_reach_review(self, provider):
         invalid = []
         value = proposal(); del value['analysis_contract']; invalid.append(value)
@@ -109,16 +134,17 @@ class PlanningContractTests(SimpleTestCase):
         self.assertEqual(provider.call_count, 1)
 
     @patch('assistant.query_planner.client.chat.completions.create')
-    def test_discovery_and_clarification_do_not_need_execution_review(self, provider):
+    def test_discovery_skips_review_but_clarification_is_reviewed(self, provider):
         for field, value in [('clarification', 'Which measure do you mean?'), ('schema_tables', ['records'])]:
             candidate = proposal()
             candidate['plans'] = []
             candidate[field] = value
             candidate['analysis_contract']['requirements'][0].update(status='needs_clarification', plan_indexes=[], limitation='Need more evidence')
-            provider.reset_mock(); provider.return_value = reply(candidate)
+            provider.reset_mock()
+            provider.side_effect = [reply(candidate), reply(APPROVED)] if field == 'clarification' else [reply(candidate)]
             result = plan_question('A new request', 'schema')
             self.assertEqual(result['plans'], [])
-            self.assertEqual(provider.call_count, 1)
+            self.assertEqual(provider.call_count, 2 if field == 'clarification' else 1)
 
 
 @override_settings(SUPPORT_DISABLE_MODEL_CALLS=True)
@@ -137,7 +163,7 @@ class PlanningExecutionTests(SimpleTestCase):
         self.assertEqual(planner.call_args.args[0], 'Total recorded amount')
         self.assertIn('The current metric was replaced', planner.call_args.args[3])
         self.assertIn('| 73 |', result['response'])
-        self.assertIn('**Scope:**', result['response'])
+        self.assertEqual(result['analysis_contract']['scope'], fixed['analysis_contract']['scope'])
 
     @patch('assistant.local_engine.query_service.get_business_schema_context', return_value='records schema')
     @patch('assistant.local_engine.query_service.query_business_data')

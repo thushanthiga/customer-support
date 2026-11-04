@@ -254,7 +254,9 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
         _add_usage(usage, response)
         proposal = _parse_response(response, output)
         validate_contract(proposal)
-        if proposal["plans"]:
+        if proposal["plans"] or proposal.get("clarification"):
+            # Also review question-only answers: unnecessary clarification is a
+            # quality failure, just as a query for the wrong metric is.
             # Separate context: the reviewer does not inherit the planner's conversation.
             review_response = client.chat.completions.create(
                 model=CHAT_MODEL,
