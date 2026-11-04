@@ -7,11 +7,20 @@
 /evaluation-results/*.json
 /evaluation-results/*.jsonl
 
+# Environment & Secret files (strictly ignored across all folders)
+.env
+.env.*
+.env-exe
+*.env-exe
+**/.env
+**/.env.*
+**/.env*
+!**/.env.example
+
 # Runtime state and compiled caches belong to the deployment environment.
 **/__pycache__/
 **/*.py[cod]
 /api/venv/
-/api/.env
 /api/db.sqlite3*
 /ui/.next/
 /ui/node_modules/
