@@ -87,6 +87,20 @@ def _has_requested_row_limit(question: str) -> bool:
     )
 
 
+def _is_intentional_ranking_or_limit(question: str, plan: dict, row_count: int) -> bool:
+    if not plan or not isinstance(plan, dict):
+        return False
+    limit = plan.get("limit")
+    if not limit or row_count != limit:
+        return False
+    if _has_requested_row_limit(question):
+        return True
+    superlative_pattern = r"\b(most|highest|top|bestseller|best-selling|best\s+selling|lowest|least|greatest|maximum|minimum|fastest|slowest)\b"
+    if re.search(superlative_pattern, question or "", re.IGNORECASE):
+        return True
+    return False
+
+
 def normalize_query_text(text: str) -> str:
     """Normalize common autocorrect / phonetic slips (e.g. 'sealed' -> 'sold' in sales/item context)."""
     t = text or ""
@@ -306,12 +320,18 @@ class LocalAnswer:
             key, value = next(iter(mapped[0].items()))
             summary += f" **{_format_header(key)}: {cell(value)}**."
         self.parts.append(summary + "\n\n" + table(mapped, maximum=500))
-        if result.get("truncated"):
+        is_intentional_limit = _is_intentional_ranking_or_limit(self.question, plan, len(rows))
+        is_truncated = bool(result.get("truncated")) and not is_intentional_limit
+        if is_truncated:
             self.status = "partial"
             title = self._paging_title or label or (plan or {}).get("base_table", "result")
             self.parts.append(
                 f"This is a partial page, not the complete result. Use **next page for {cell(title)}** to continue. "
                 "Page row counts are not population totals."
+            )
+        elif is_intentional_limit and len(rows) > 0:
+            self.parts.append(
+                f"Showing top {len(rows)} matching record(s) for the requested ranking."
             )
         if result.get("offset"):
             self.parts.append(f"Page starts after {result['offset']} previously returned row(s).")
@@ -322,7 +342,7 @@ class LocalAnswer:
             self.parts.append(
                 "A not-recorded calculated value has a missing input or an undefined division (zero divisor); it is not a zero amount."
             )
-        self.data_pages.append({"title": label or (plan.get("base_table") if plan else ""), "rows": mapped, "truncated": bool(result.get("truncated")),
+        self.data_pages.append({"title": label or (plan.get("base_table") if plan else ""), "rows": mapped, "truncated": is_truncated,
                                 "scope": {key: (result.get("query_audit") or {}).get(key) for key in ("filters", "group_by", "having")},
                                 "read_at": result.get("mcp_read_at")})
         if plan:
@@ -330,7 +350,7 @@ class LocalAnswer:
             pages = self.state.setdefault("query_pages", [])
             title = self._paging_title or label or (plan.get("base_table") if plan else "")
             pages[:] = [p for p in pages if p["title"] != title]
-            if result.get("truncated"):
+            if is_truncated:
                 pages.append({"title": title, "plan": plan, "next_offset": result.get("next_offset")})
 
     def run(self):

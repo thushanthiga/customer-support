@@ -21,6 +21,60 @@ Use only supported structured operators, never SQL fragments. Give repeated tabl
 SUPPORT AND DIAGNOSIS
 Inspect relevant recorded settings, eligibility, status, parent conditions and target scope. A setting alone does not prove the cause of an unobserved error or guarantee a transaction will succeed. Missing UI/error context requires clarification. Navigation and workflow steps come from documentation, not database table names. Do not claim to change records: tools are read-only.
 
+CORE DATABASE RELATIONSHIPS & OPERATIONAL ANALYTICS CONVENTIONS:
+1. Parties (Customers & Suppliers):
+   - Table: `core_parties` (columns: id, first_name, last_name, code, type).
+   - In `core_parties`, type='supplier' identifies suppliers; type='customer' identifies customers.
+   - For party name, select `first_name` (alias="first_name") and `last_name` (alias="last_name") or `first_name` (alias="party_name").
+2. Invoices & Bills (AP vs AR):
+   - Table: `finance_invoices` (columns: id, invoice_number, party_id, type, amount_due, amount_settled, grand_total, status, invoice_date, due_date).
+   - `type='ap'` represents Supplier Purchase Invoices / Bills (Accounts Payable). For unpaid/outstanding bills, filter `finance_invoices.type='ap'` and `finance_invoices.amount_due > 0` (or `status != 'paid'`). Join `core_parties` ON `finance_invoices.party_id = core_parties.id`.
+   - `type='ar'` represents Customer Sales Invoices (Accounts Receivable). For unpaid/outstanding customer invoices, filter `finance_invoices.type='ar'` and `finance_invoices.amount_due > 0`. Join `core_parties` ON `finance_invoices.party_id = core_parties.id`.
+   - Do NOT query `procurement_supplier_bills` for supplier bills or invoices; all operational tenant invoices and bills are maintained in `finance_invoices`.
+3. Sales Orders, Order Lines & Customer Analytics:
+   - `sales_orders` (columns: id, so_number, party_id, warehouse_id, order_date, expected_delivery, grand_total, status).
+   - `sales_order_lines` (columns: id, sales_order_id, item_id, quantity, fulfilled_quantity, unit_price).
+   - Joins: `sales_orders.party_id = core_parties.id`, `sales_order_lines.sales_order_id = sales_orders.id`, `sales_order_lines.item_id = inventory_items.id`.
+   - Top customers by sales / revenue: when asked without a date filter, default to all-time recorded sales. Group by `core_parties.id`, `core_parties.first_name`, `core_parties.last_name`, aggregate `SUM(sales_orders.grand_total)` as `total_sales`, and order by `total_sales DESC LIMIT 20`. Do NOT ask clarification for date range or order vs invoice.
+   - Which customers bought an item: query `sales_order_lines` joined to `sales_orders` on `sales_order_id = sales_orders.id`, joined to `core_parties` on `sales_orders.party_id = core_parties.id`, joined to `inventory_items` on `sales_order_lines.item_id = inventory_items.id`. Filter `inventory_items.name LIKE '%<term>%' OR inventory_items.sku = '<term>'`. Do not ask clarification for exact SKU.
+4. Purchase Orders & Supplier Analytics:
+   - `procurement_purchase_orders` (columns: id, po_number, party_id, warehouse_id, order_date, expected_delivery, grand_total, status).
+   - `procurement_purchase_order_lines` (columns: id, purchase_order_id, item_id, quantity, received_quantity, billed_quantity, unit_price).
+   - Joins: `procurement_purchase_orders.party_id = core_parties.id`, `procurement_purchase_order_lines.purchase_order_id = procurement_purchase_orders.id`, `procurement_purchase_order_lines.item_id = inventory_items.id`.
+   - Which suppliers supplied an item: query `procurement_purchase_order_lines` joined to `procurement_purchase_orders` on `purchase_order_id = procurement_purchase_orders.id`, joined to `core_parties` on `procurement_purchase_orders.party_id = core_parties.id`, joined to `inventory_items` on `procurement_purchase_order_lines.item_id = inventory_items.id`. Filter `inventory_items.name LIKE '%<term>%' OR inventory_items.sku = '<term>'`.
+5. Warehouses & Physical Inventory:
+   - `core_warehouses` (columns: id, name, code, is_active).
+   - `inventory_stock_balances` (columns: id, item_id, warehouse_id, qty_on_hand, qty_available, qty_allocated, qty_held).
+   - `inventory_items` (columns: id, sku, name, status, has_stocks, category_id, brand_id).
+   - Joins: `inventory_stock_balances.item_id = inventory_items.id`, `inventory_stock_balances.warehouse_id = core_warehouses.id`.
+   - Stock by warehouse: aggregate SUM(inventory_stock_balances.qty_on_hand) grouped by core_warehouses.id, core_warehouses.name.
+6. Product Demand, Top Selling & Sales Velocity:
+   - When asked "what are the items in demand", "which items are in high demand", "top selling items", "bestsellers", "fast moving items", or "sales popularity":
+     Evaluate demand through customer sales orders (`sales_order_lines` and `sales_orders`).
+     Base table: `sales_order_lines`
+     Joins: INNER JOIN `inventory_items` ON `sales_order_lines.item_id = inventory_items.id`, INNER JOIN `sales_orders` ON `sales_order_lines.sales_order_id = sales_orders.id`.
+     Group by: `inventory_items.id`, `inventory_items.sku`, `inventory_items.name`.
+     Select: `inventory_items.id`, `inventory_items.sku`, `inventory_items.name`, COUNT(DISTINCT sales_order_lines.sales_order_id) as order_count, SUM(sales_order_lines.quantity) as total_quantity_demanded, MAX(sales_orders.order_date) as latest_order_date.
+     Order by: total_quantity_demanded DESC.
+     Do NOT query manufacturing_demands for sales/product demand.
+7. Items Below Minimum Stock / Replenishment Rules:
+   - When asked "which items are below minimum quantity" or "stock lesser than item master minimum quantity":
+     Base table: `inventory_items`
+     Joins: LEFT JOIN `inventory_item_replenishment_rules` ON `inventory_item_replenishment_rules.item_id = inventory_items.id`, LEFT JOIN `inventory_stock_balances` ON `inventory_stock_balances.item_id = inventory_items.id`.
+     Select: `inventory_items.id`, `inventory_items.sku`, `inventory_items.name`, `inventory_item_replenishment_rules.min_stock_level` (alias='minimum_quantity', coalesce=0), SUM(inventory_stock_balances.qty_available) as stock_quantity, SUM(inventory_stock_balances.qty_on_hand) as qty_on_hand.
+     Group by: `inventory_items.id`, `inventory_items.sku`, `inventory_items.name`, `inventory_item_replenishment_rules.min_stock_level`.
+     Having: [{'alias': 'stock_quantity', 'operator': '<', 'value': {'alias': 'minimum_quantity'}}].
+     Order by: stock_quantity ASC.
+     Do NOT ask clarification about on-hand vs available or item-level vs warehouse-level rules; execute this plan directly.
+8. Unsold Items:
+   - For items that have never been sold / unsold items:
+     Base table: `inventory_items`
+     Joins: LEFT JOIN `sales_order_lines` ON `sales_order_lines.item_id = inventory_items.id`.
+     Filters: `sales_order_lines.id IS NULL`, `inventory_items.status = 'active'`, `inventory_items.deleted_at IS NULL`.
+     Order by: `item_id ASC`.
+     Limit: 50.
+     Do NOT return missing_capability or say sale definition is unestablished; execute this standard unsold catalog plan.
+
 OUTPUT
 Return intent, resolved_question, plans and optional schema_tables, clarification, missing_capability. Do not emit factual answer prose, SQL or confidence percentages. Check every requested component against the final plans; explicitly mark unsupported components. If validation feedback is present, repair the specific issue without weakening the requested scope or repeating the rejected plan.
 """
