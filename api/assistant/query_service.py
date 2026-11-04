@@ -305,6 +305,10 @@ def _relevant_tables(schema, question: str, limit: int = 20):
     if any(w in expanded for w in ["invoice", "invoices", "receivable", "receivables", "ar", "overdue"]):
         expanded.update(["invoice", "invoices", "amount", "due", "status", "party", "settled"])
 
+    # Demand, Popularity & Sales Velocity
+    if any(w in expanded for w in ["demand", "demanded", "demands", "popular", "popularity", "velocity", "top", "trending", "bestseller", "bestsellers", "fast", "moving"]):
+        expanded.update(["sales", "orders", "lines", "quantity", "items", "balances"])
+
     # Orders (Sales & Purchase)
     if any(w in expanded for w in ["order", "orders", "so", "po"]):
         expanded.update(["order", "orders", "lines", "party", "items"])
@@ -342,7 +346,7 @@ def _relevant_tables(schema, question: str, limit: int = 20):
             score += _PRIMARY_TABLE_BOOSTS[table]
 
         # Deprioritize unrelated specialist verticals unless specifically requested
-        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_")) and not any(k in q_lower for k in ("jewelry", "gold", "silver", "karigar", "money", "exchange", "currency", "construction", "boq")):
+        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_", "manufacturing_")) and not any(k in q_lower for k in ("jewelry", "gold", "silver", "karigar", "money", "exchange", "currency", "construction", "boq", "mrp", "work order", "production order")):
             score -= 12
         if score > 0:
             scores.append((score, table))

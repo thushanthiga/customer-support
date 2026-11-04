@@ -1016,7 +1016,12 @@ class LocalAnswer:
                 "   - For warehouse queries (e.g. warehouse with most stock):\n"
                 "     Always show Warehouse Name, Warehouse ID, and Total Stock Quantity.\n"
                 "   - For multi-table join results (e.g. which customers bought which items, or which suppliers supplied an item):\n"
-                "     Display the full context in the Markdown table (e.g. Customer/Supplier Name, Order Number, Item Name, Quantity, and Unit Price)."
+                "     Display the full context in the Markdown table (e.g. Customer/Supplier Name, Order Number, Item Name, Quantity, and Unit Price).\n"
+                "5. Demand, Popularity & Sales Velocity Analytics:\n"
+                "   - For queries asking about items in demand, top selling products, or fast moving items:\n"
+                "     * Provide a clear, analytical summary in your opening sentence (e.g. 'Based on sales order analysis, the following items have the highest customer demand (ranked by total quantity ordered):').\n"
+                "     * Present a clean Markdown table with columns: | Item Name | SKU | ID | Total Quantity Demanded | Orders Count | Latest Order Date |.\n"
+                "     * Highlight key business insights (e.g., the leading product by volume or frequency) to provide actionable analytics."
             )
             user_prompt = f"User Question: {self.question}\n\nLive Database Query Results & Analytics:\n{json.dumps(datasets, default=str)}"
             if self.previous:
