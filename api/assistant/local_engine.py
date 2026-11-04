@@ -796,6 +796,110 @@ class LocalAnswer:
             unresolved = failed
             break
         if successes:
+            # Companion check for inventory minimum stock / replenishment questions
+            q_lower = (self.question or "").lower()
+            is_min_stock_q = any(
+                phrase in q_lower
+                for phrase in [
+                    "below minimum",
+                    "lesser than minimum",
+                    "less than minimum",
+                    "minimum quantity",
+                    "minimum stock",
+                    "min quantity",
+                    "min stock",
+                    "min_stock_level",
+                    "low stock",
+                    "replenishment",
+                    "reorder point",
+                ]
+            ) or any(
+                "inventory_item_replenishment_rules" in str(p) for _, p, _ in successes
+            )
+
+            if is_min_stock_q:
+                # 1. Check if total configured replenishment rules is known
+                has_rules_count = any(
+                    p.get("base_table") == "inventory_item_replenishment_rules" for _, p, _ in successes
+                )
+                if not has_rules_count:
+                    try:
+                        rules_cnt_plan = {
+                            "base_table": "inventory_item_replenishment_rules",
+                            "select": [
+                                {
+                                    "table": "inventory_item_replenishment_rules",
+                                    "column": "id",
+                                    "aggregate": "COUNT",
+                                    "alias": "total_configured_rules",
+                                }
+                            ],
+                        }
+                        cnt_res = query_service.query_business_data(rules_cnt_plan, self.tenant)
+                        if not cnt_res.get("error"):
+                            successes.append(("auto_replenishment_rules_count", rules_cnt_plan, cnt_res))
+                    except Exception:
+                        pass
+
+                # 2. Check if depleted / negative stock query was run
+                has_depleted_query = any(
+                    any(
+                        h.get("alias") in ("qty_available", "stock_quantity", "quantity", "qty_on_hand")
+                        and h.get("operator") in ("<=", "<")
+                        and h.get("value") in (0, "0")
+                        for h in (p.get("having") or [])
+                    )
+                    for _, p, _ in successes
+                )
+                if not has_depleted_query:
+                    try:
+                        depleted_plan = {
+                            "base_table": "inventory_items",
+                            "select": [
+                                {"table": "inventory_items", "column": "id", "alias": "item_id"},
+                                {"table": "inventory_items", "column": "sku", "alias": "sku"},
+                                {"table": "inventory_items", "column": "name", "alias": "item_name"},
+                                {
+                                    "table": "inventory_stock_balances",
+                                    "column": "qty_available",
+                                    "aggregate": "SUM",
+                                    "alias": "qty_available",
+                                },
+                                {
+                                    "table": "inventory_stock_balances",
+                                    "column": "qty_on_hand",
+                                    "aggregate": "SUM",
+                                    "alias": "qty_on_hand",
+                                },
+                            ],
+                            "joins": [
+                                {
+                                    "table": "inventory_stock_balances",
+                                    "left_table": "inventory_items",
+                                    "left_column": "id",
+                                    "right_column": "item_id",
+                                    "type": "LEFT",
+                                }
+                            ],
+                            "filters": [
+                                {"table": "inventory_items", "column": "deleted_at", "operator": "IS NULL"},
+                                {"table": "inventory_items", "column": "has_stocks", "operator": "=", "value": 1},
+                            ],
+                            "group_by": [
+                                {"table": "inventory_items", "column": "id"},
+                                {"table": "inventory_items", "column": "sku"},
+                                {"table": "inventory_items", "column": "name"},
+                            ],
+                            "having": [{"alias": "qty_available", "operator": "<=", "value": 0}],
+                            "order_by": [{"alias": "qty_available", "direction": "asc"}],
+                            "limit": 50,
+                        }
+                        depleted_res = query_service.query_business_data(depleted_plan, self.tenant)
+                        if not depleted_res.get("error"):
+                            successes.append(("auto_depleted_stock_balances", depleted_plan, depleted_res))
+                    except Exception:
+                        pass
+
             joined_analysis = None
             if len(successes) > 1:
                 joined_analysis = backend_join_and_analyze(successes, self.question)
@@ -880,7 +984,21 @@ class LocalAnswer:
                 "     If quantity is null or missing, show 0.\n"
                 "   - Never expose technical SQL jargon (e.g. 'Checked scope:', 'deleted_at IS NULL', 'sales_order_lines.id IS NULL', or raw database joins).\n"
                 "   - If no records match the criteria, clearly explain in plain English what was checked and what it means (e.g., 'No sales records were found for ...').\n"
-                "   - Never invent records or numbers not present in the supplied datasets."
+                "   - Never invent records or numbers not present in the supplied datasets.\n"
+                "3. Inventory Stock, Minimum Quantities & Replenishment Scenarios:\n"
+                "   - Understand the real-world relationships between tables in Apptimate ERP:\n"
+                "     * `inventory_items`: Catalog item definitions.\n"
+                "     * `inventory_item_replenishment_rules`: Configured item replenishment thresholds (min_stock_level, reorder_point).\n"
+                "     * `inventory_stock_balances`: Live physical stock balances across warehouses (qty_available, qty_on_hand).\n"
+                "   - When asked 'which items are below minimum quantity', 'low stock items', 'reorder point', or replenishment:\n"
+                "     * Scenario A: If items have configured minimum stock levels (`min_stock_level`) and stock is below that level, display those items in a Markdown table with Item Name, SKU, ID, Current Available Stock, and Minimum Quantity.\n"
+                "     * Scenario B: If NO replenishment rules are configured in the system (`total_configured_rules` is 0 or no items have `min_stock_level` defined):\n"
+                "       NEVER deceptively state 'No items are below minimum quantity' without explanation!\n"
+                "       Clearly state that no Item Master minimum stock thresholds (`min_stock_level`) have been configured yet in replenishment rules.\n"
+                "       Explain that in real-world inventory management, the baseline operational minimum is zero (0). Items with zero or negative stock are critically depleted (out of stock / oversold).\n"
+                "       ALWAYS present a clean Markdown table of the items with depleted/negative stock from the query results, showing: Item Name, SKU, ID, Available Quantity, On Hand Quantity, and Configured Min Level (state 'Not Configured (0 baseline)').\n"
+                "       Add a helpful recommendation advising the administrator to configure safety stock levels under Inventory > Item Master > Replenishment Rules.\n"
+                "     * Scenario C: If both configured rule breaches and zero/negative stock items exist, explain both clearly."
             )
             user_prompt = f"User Question: {self.question}\n\nLive Database Query Results & Analytics:\n{json.dumps(datasets, default=str)}"
             if self.previous:
