@@ -189,3 +189,46 @@ On 2026-11-04, all 16 new regression tests passed. The full historical suite had
 8 failures and 23 errors both before and after this change, including references
 to removed modules and older database mocks. Production data correctness and
 throughput have not been certified by these offline tests.
+
+## Request-driven query planning
+
+The planner no longer uses canned per-question SQL recipes or question-specific
+spelling/risk rules. Its general prompt requires an `analysis_contract` describing
+the entity, metric, row grain, scope, assumptions, unresolved ambiguities and the
+plans supporting each requested component. The current user question remains
+unchanged throughout discovery and repair. Previous questions supply context only;
+they are not saved factual answers.
+
+Planner JSON is validated locally against its schema and checked for complete plan
+coverage. Before execution, a separate model call reviews the proposed plans against
+the original question and authorized schema. Rejection goes back to planning with
+specific feedback; unavailable review fails closed. Validating JSON structure alone
+does not establish semantic correctness; this distinction follows the
+[OpenAI structured-output guidance](https://developers.openai.com/api/docs/guides/structured-outputs).
+Database execution still validates fields, relationships, types and bound predicates.
+
+Schema context includes indexes/unique keys and labels declared versus inferred
+relationships, so planners can assess join fan-out and avoid treating a naming
+convention as proof of business meaning. The schema cache stores metadata only.
+Business results are freshly queried; neither retrieval snippets nor prior answers
+supply analytical values. Repaired proposals replace previous proposal results.
+Displayed analyses include the reviewed metric, scope and any assumptions.
+
+`QUERY_REASONING_EFFORT` (default `medium`) and `REVIEW_REASONING_EFFORT` (default
+`low`) configure the existing model's reasoning levels. Existing environment values
+take precedence; configure levels supported by your deployment. An executable plan
+adds one review call, increasing token use and latency in exchange for a second
+semantic check. Structural/semantic repair is bounded by the four-attempt planning
+loop; service failures stop rather than repeatedly attempting unreviewed execution.
+
+Verification on 2026-11-04: general contract/execution tests and the current-engine
+regressions pass offline. Two real-provider synthetic-schema checks additionally
+verified a scoped count plan and a clarification after a metric change, without
+reading tenant records. These checks verify specific behavior, not universal model
+accuracy or production throughput. Model-based review can still miss errors; live
+scenario evaluation remains necessary.
+
+```sh
+cd api
+SUPPORT_DISABLE_MODEL_CALLS=true ./venv/bin/python manage.py test assistant.tests.test_planning_contract assistant.tests.test_reliable_support --noinput
+```

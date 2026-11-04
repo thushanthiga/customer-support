@@ -148,7 +148,9 @@ class AnalyticsCompilerTests(SimpleTestCase):
     @override_settings(SUPPORT_DISABLE_MODEL_CALLS=False)
     @patch('assistant.query_planner.client.chat.completions.create')
     def test_retry_receives_actual_validation_feedback(self, provider):
+        from assistant.query_planner import PlanningValidationError
         provider.return_value = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='{"plans": []}'))], usage=None)
-        plan_question('Total invoices', 'verified schema', failures=['Unknown column: revenue'])
+        with self.assertRaises(PlanningValidationError):
+            plan_question('Total invoices', 'verified schema', failures=['Unknown column: revenue'])
         request = json.loads(provider.call_args.kwargs['messages'][1]['content'])
         self.assertEqual(request['validation_feedback'], ['Unknown column: revenue'])

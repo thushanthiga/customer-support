@@ -8,7 +8,7 @@ from openai import OpenAI
 
 from . import query_service
 from .erp_access import public_schema, redact
-from .query_planner import plan_question
+from .query_planner import PlanningValidationError, plan_question
 from .rag_service import (
     _documented_sidebar_paths,
     retrieve_navigation_chunks,
@@ -102,14 +102,8 @@ def _is_intentional_ranking_or_limit(question: str, plan: dict, row_count: int) 
 
 
 def normalize_query_text(text: str) -> str:
-    """Normalize common autocorrect / phonetic slips (e.g. 'sealed' -> 'sold' in sales/item context)."""
-    t = text or ""
-    t = re.sub(r"\bnot\s+sealed\b", "not sold", t, flags=re.IGNORECASE)
-    t = re.sub(r"\bnot\s+selled\b", "not sold", t, flags=re.IGNORECASE)
-    t = re.sub(r"\bsealed\s+yet\b", "sold yet", t, flags=re.IGNORECASE)
-    t = re.sub(r"\bunsealed\b", "unsold", t, flags=re.IGNORECASE)
-    t = re.sub(r"\bitems?\s+which\s+are\s+sealed\b", "items which are sold", t, flags=re.IGNORECASE)
-    return t
+    """Preserve user meaning and literal identifiers; interpretation belongs to planning."""
+    return (text or "").strip()
 
 
 def extract_item_reference(question: str, history: tuple = ()) -> dict:
@@ -247,6 +241,8 @@ class LocalAnswer:
         self._paging_title = None
         self.search_type = "database"
         self.classification_reason = ""
+        self.analysis_contract = None
+        self.query_review = None
 
     def query(self, plan, label=None, question=None, top=False):
         if not plan.get("order_by"):
@@ -360,6 +356,10 @@ class LocalAnswer:
             q,
             re.I,
         )
+        if page_request and not self.state.get("last_query"):
+            self.parts.append("There is no current result page to continue. Please specify the report or answer the pending clarification.")
+            self.status = "needs_clarification"
+            return self.payload()
         if page_request and self.state.get("last_query"):
             pages = self.state.get("query_pages")
             if pages is None:
@@ -388,6 +388,9 @@ class LocalAnswer:
                     self.status = "lookup_failed"
             return self.payload()
 
+        # A new request must not leave an older report available as its continuation.
+        for key in ("last_query", "next_offset", "last_query_summary", "query_pages"):
+            self.state.pop(key, None)
         # 1. Classify the inquiry
         cls = classify_query(self.question, self.previous)
         self.search_type = cls.get("classification", "database")
@@ -451,11 +454,6 @@ class LocalAnswer:
             add_chunks(nav_ctx, nav_refs)
         rag_ctx, rag_refs = retrieve_relevant_chunks(q, top_k=5)
         add_chunks(rag_ctx, rag_refs)
-
-        # Enrich context with transaction/item entry flows when action or discount is requested
-        if any(w in q.lower() for w in ["discount", "price", "order", "quotation", "quote", "invoice", "pos", "sell"]):
-            nav_extra_ctx, nav_extra_refs = retrieve_navigation_chunks("Sales Orders Quotations POS Items entry flow", top_k=3)
-            add_chunks(nav_extra_ctx, nav_extra_refs)
 
         combined_context = "\n\n---\n\n".join(context_parts[:8]) if context_parts else "No specific documentation section matched."
         paths = _documented_sidebar_paths(combined_context) if context_parts else []
@@ -532,6 +530,17 @@ class LocalAnswer:
                     self.failures,
                     allow_discovery=allow_discovery,
                 )
+            except PlanningValidationError as error:
+                self.prompt_tokens += error.usage.get("prompt_tokens", 0)
+                self.completion_tokens += error.usage.get("completion_tokens", 0)
+                self.model_source = error.usage.get("source", self.model_source)
+                self.model_name = error.usage.get("model", self.model_name)
+                self.failures.append(str(error))
+                unresolved = True
+                if not error.retryable:
+                    self.status = "lookup_failed"
+                    break
+                continue
             except Exception:
                 if successes:
                     unresolved = True
@@ -544,10 +553,11 @@ class LocalAnswer:
             self.completion_tokens += proposed.get("usage", {}).get("completion_tokens", 0)
             self.model_source = proposed.get("usage", {}).get("source", "provider")
             self.model_name = proposed.get("usage", {}).get("model", "")
-            resolved_q = (proposed.get("resolved_question") or "").strip()
-            if resolved_q:
-                self.question = resolved_q
-                planning_question = resolved_q
+            if proposed.get("plans") or not successes:
+                self.analysis_contract = proposed.get("analysis_contract")
+                self.query_review = proposed.get("query_review")
+            # Model paraphrases are advisory. Never let them replace the user's
+            # request in schema discovery, retries, validation or execution.
             if proposed.get("schema_tables"):
                 current = re.findall(r"^- ([\w]+):", schema, re.M)
                 if set(proposed["schema_tables"]) <= set(current):
@@ -570,9 +580,19 @@ class LocalAnswer:
                     allow_discovery = False
                 continue
             if not proposed.get("plans"):
+                if proposed.get("clarification"):
+                    # A later ambiguity invalidates any earlier provisional result.
+                    for key in ("last_query", "next_offset", "last_query_summary", "query_pages"):
+                        self.state.pop(key, None)
+                    self.analysis_contract = proposed.get("analysis_contract")
+                    self.query_review = proposed.get("query_review")
+                    self.parts.append(proposed["clarification"])
+                    self.status = "needs_clarification"
+                    return
                 if successes:
+                    unresolved = True
                     break
-                if attempt < 3 and not expanded_once and (proposed.get("clarification") or proposed.get("missing_capability")):
+                if attempt < 3 and not expanded_once and proposed.get("missing_capability") and not proposed.get("clarification"):
                     expanded = query_service.get_business_schema_context(
                         self.question, self.tenant, force=True, table_limit=36
                     )
@@ -580,30 +600,18 @@ class LocalAnswer:
                     if expanded and expanded != schema:
                         schema = expanded
                         continue
-                if proposed.get("clarification"):
-                    self.parts.append(proposed["clarification"])
-                    self.status = "needs_clarification"
-                    self.evidence.append({"tool": "mcp:describe_tables", "result": {"tables": proposed.get("schema_tables", []), "business_rows_read": False}})
-                    return
                 if proposed.get("missing_capability"):
                     self.parts.append("The discovered schema does not support this part: " + proposed["missing_capability"])
                     self.status = "unsupported"
                     self.evidence.append({"tool": "mcp:describe_tables", "result": {"tables": proposed.get("schema_tables", []), "business_rows_read": False}})
                     return
                 break
+            # A repaired proposal replaces its predecessor; never merge rows from
+            # different query versions into one purportedly coherent answer.
+            successes = []
+            seen = set()
             failed = False
             for plan in proposed.get("plans", [])[:4]:
-                selected = plan.get("select", [])
-                limit = plan.get("limit")
-                if (
-                    isinstance(limit, int)
-                    and not isinstance(limit, bool)
-                    and 0 < limit < 50
-                    and not any(field.get("aggregate") for field in selected)
-                    and not plan.get("group_by")
-                    and not _has_requested_row_limit(self.question)
-                ):
-                    plan = {**plan, "limit": 50}
                 fingerprint = json.dumps(plan, sort_keys=True, default=str)
                 if fingerprint in seen:
                     if not any(key == fingerprint for key, _, _ in successes):
@@ -637,17 +645,26 @@ class LocalAnswer:
             break
         if successes:
             self.data_pages = []
+            if self.analysis_contract and self.query_review and self.query_review.get("verdict") == "approve":
+                self.parts.append("**Analysis:** " + cell(self.analysis_contract["metric"])
+                                  + "\n\n**Scope:** " + cell(self.analysis_contract["scope"]))
+                if self.analysis_contract["assumptions"]:
+                    self.parts.append("**Assumptions:** " + "; ".join(cell(value) for value in self.analysis_contract["assumptions"]))
             for index, (_, plan, result) in enumerate(successes, 1):
                 self.render_query(result, f"Result {index}", plan)
-            limitation = proposed.get("missing_capability") or proposed.get("clarification")
+            limitations = [item["limitation"] for item in (self.analysis_contract or {}).get("requirements", [])
+                           if item["status"] != "supported"]
+            limitation = proposed.get("missing_capability") or proposed.get("clarification") or "; ".join(limitations)
             if unresolved or limitation:
                 self.parts.append("Some requested details could not be verified. " + (limitation or "The verified results are shown above; missing values were not treated as zero."))
                 self.status = "partial"
             return
         self.parts.append(
-            "I could not verify the requested records in the database with the available fields and relationships."
+            "I could not validate a query that reliably answers this request. No unapproved query result is being presented. "
+            "Please specify the metric, time period, or business definition if the request leaves those unclear."
         )
-        self.status = "unsupported"
+        if self.status != "lookup_failed":
+            self.status = "unsupported"
         self.evidence.append({"tool": "mcp:describe_tables", "result": {"database": self.tenant, "verified": False}})
 
     def payload(self):
@@ -668,6 +685,8 @@ class LocalAnswer:
         return {
             "response": "\n\n".join(self.parts),
             "answer_status": self.status,
+            "analysis_contract": self.analysis_contract,
+            "query_review": self.query_review,
             "tenant_database": self.tenant,
             "search_type": getattr(self, "search_type", "database"),
             "source_type": getattr(self, "search_type", "database"),

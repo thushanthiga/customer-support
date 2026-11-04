@@ -187,6 +187,14 @@ def _schema_for(tenant_db: str):
                 (tenant_db,),
             )
             relationship_rows = cursor.fetchall()
+            cursor.execute(
+                """SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX
+                   FROM INFORMATION_SCHEMA.STATISTICS
+                   WHERE TABLE_SCHEMA = %s
+                   ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX""",
+                (tenant_db,),
+            )
+            index_rows = cursor.fetchall()
 
     tables = {}
     column_constraints = {}
@@ -209,12 +217,28 @@ def _schema_for(tenant_db: str):
         left, right = row["TABLE_NAME"], row["REFERENCED_TABLE_NAME"]
         if left in tables and right in tables:
             relationships.add((left, row["COLUMN_NAME"], right, row["REFERENCED_COLUMN_NAME"]))
+    declared_relationships = set(relationships)
     relationships.update(_infer_schema_relationships(tables))
+    indexes = {}
+    incomplete_indexes = set()
+    for row in index_rows:
+        table, column = row["TABLE_NAME"], row["COLUMN_NAME"]
+        if table in tables and column not in tables[table]:
+            incomplete_indexes.add((table, row["INDEX_NAME"]))
+        if table in tables and column in tables[table]:
+            index = indexes.setdefault(table, {}).setdefault(row["INDEX_NAME"], {
+                "unique": not bool(row["NON_UNIQUE"]), "columns": [],
+            })
+            index["columns"].append(column)
+    for table, name in incomplete_indexes:
+        indexes.get(table, {}).pop(name, None)
 
     schema = {
         "tables": tables,
         "relationships": relationships,
         "column_constraints": column_constraints,
+        "indexes": indexes,
+        "declared_relationships": declared_relationships,
     }
     with _SCHEMA_CACHE_LOCK:
         _SCHEMA_CACHE[tenant_db] = (now, schema)
@@ -394,18 +418,23 @@ def _format_schema_context(schema, selected):
         }
         if enum_columns:
             rows.append("Database enum values for " + table + ": " + json.dumps(enum_columns))
+        indexes = schema.get("indexes", {}).get(table, {})
+        if indexes:
+            rows.append("Database indexes for " + table + ": " + json.dumps(indexes))
     table_rank = {table: index for index, table in enumerate(selected)}
     ranked_edges = sorted(
         schema["relationships"],
         key=lambda edge: (table_rank.get(edge[0], len(selected)) + table_rank.get(edge[2], len(selected)), edge),
     )
     edges = [
-        f"{left}.{left_col} = {right}.{right_col}"
+        f"{left}.{left_col} = {right}.{right_col} ("
+        + ("declared foreign key" if (left, left_col, right, right_col) in schema.get("declared_relationships", set())
+           else "inferred application relationship; cardinality and business meaning are not proven") + ")"
         for left, left_col, right, right_col in ranked_edges
         if left in selected and right in selected
     ]
     if edges:
-        rows.append("Available verified joins: " + "; ".join(edges))
+        rows.append("Allowed join candidates (source labels matter): " + "; ".join(edges))
     rows.append("Authorized business table catalogue (request schema_tables for additional details): " + ", ".join(sorted(schema["tables"])))
     return "\n".join(rows)
 
