@@ -998,7 +998,16 @@ class LocalAnswer:
                 "       Explain that in real-world inventory management, the baseline operational minimum is zero (0). Items with zero or negative stock are critically depleted (out of stock / oversold).\n"
                 "       ALWAYS present a clean Markdown table of the items with depleted/negative stock from the query results, showing: Item Name, SKU, ID, Available Quantity, On Hand Quantity, and Configured Min Level (state 'Not Configured (0 baseline)').\n"
                 "       Add a helpful recommendation advising the administrator to configure safety stock levels under Inventory > Item Master > Replenishment Rules.\n"
-                "     * Scenario C: If both configured rule breaches and zero/negative stock items exist, explain both clearly."
+                "     * Scenario C: If both configured rule breaches and zero/negative stock items exist, explain both clearly.\n"
+                "4. Cross-Module Relationships & Entity Details:\n"
+                "   - For supplier queries (e.g. unpaid bills, outstanding amounts, POs):\n"
+                "     Always show Supplier Name, Supplier ID, Bill/Invoice Number, Amount Due, Due Date, and Status.\n"
+                "   - For customer queries (e.g. outstanding invoices, sales orders, total sales):\n"
+                "     Always show Customer Name, Customer ID, Order/Invoice Number, Date, Status, and Total Amount.\n"
+                "   - For warehouse queries (e.g. warehouse with most stock):\n"
+                "     Always show Warehouse Name, Warehouse ID, and Total Stock Quantity.\n"
+                "   - For multi-table join results (e.g. which customers bought which items, or which suppliers supplied an item):\n"
+                "     Display the full context in the Markdown table (e.g. Customer/Supplier Name, Order Number, Item Name, Quantity, and Unit Price)."
             )
             user_prompt = f"User Question: {self.question}\n\nLive Database Query Results & Analytics:\n{json.dumps(datasets, default=str)}"
             if self.previous:
@@ -1070,7 +1079,7 @@ class LocalAnswer:
             },
             "retrieved_references": self.references,
             "evidence": self.evidence,
-            "principal": {"user_id": self.principal["user_id"], "tenant": self.tenant},
+            "principal": {"user_id": (self.principal or {}).get("user_id", 1), "tenant": self.tenant},
             "next_offset": self.state.get("next_offset"),
             "data_pages": self.data_pages,
         }

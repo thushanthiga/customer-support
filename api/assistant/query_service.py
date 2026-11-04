@@ -224,7 +224,48 @@ def _schema_for(tenant_db: str):
     return schema
 
 
-def _relevant_tables(schema, question: str, limit: int = 16):
+_PRIMARY_TABLE_BOOSTS = {
+    "finance_invoices": 14,
+    "core_parties": 14,
+    "inventory_items": 14,
+    "inventory_stock_balances": 12,
+    "sales_orders": 12,
+    "sales_order_lines": 12,
+    "procurement_purchase_orders": 12,
+    "procurement_purchase_order_lines": 12,
+    "core_warehouses": 10,
+    "inventory_item_replenishment_rules": 10,
+    "inventory_categories": 8,
+    "inventory_brands": 8,
+    "sales_goods_issue_notes": 10,
+    "sales_goods_issue_note_lines": 10,
+    "procurement_goods_receipt_notes": 10,
+    "procurement_goods_receipt_note_lines": 10,
+    "fin_chart_of_accounts": 8,
+    "fin_journal_entries": 8,
+    "fin_journal_entry_lines": 8,
+}
+
+_CORE_FK_MAP = {
+    "party_id": "core_parties",
+    "customer_id": "core_parties",
+    "supplier_id": "core_parties",
+    "item_id": "inventory_items",
+    "warehouse_id": "core_warehouses",
+    "sales_order_id": "sales_orders",
+    "purchase_order_id": "procurement_purchase_orders",
+    "invoice_id": "finance_invoices",
+    "category_id": "inventory_categories",
+    "brand_id": "inventory_brands",
+    "uom_id": "inventory_units_of_measure",
+    "goods_issue_note_id": "sales_goods_issue_notes",
+    "goods_receipt_note_id": "procurement_goods_receipt_notes",
+    "journal_entry_id": "fin_journal_entries",
+    "account_id": "fin_chart_of_accounts",
+}
+
+
+def _relevant_tables(schema, question: str, limit: int = 20):
     """Select relevant tenant tables by matching question tokens against table and column names."""
     words = set(re.findall(r"[a-z0-9]+", (question or "").lower()))
     words -= {
@@ -243,18 +284,48 @@ def _relevant_tables(schema, question: str, limit: int = 16):
         return result
 
     expanded = variants(words)
-    if "minimum" in expanded:
-        expanded.add("min")
-    if "min" in expanded:
-        expanded.add("minimum")
-    if "maximum" in expanded:
-        expanded.add("max")
-    if "max" in expanded:
-        expanded.add("maximum")
-    if "quantity" in expanded:
-        expanded.add("qty")
-    if "qty" in expanded:
-        expanded.add("quantity")
+
+    # Quantity / Measurement / Replenishment
+    if any(w in expanded for w in ["minimum", "min", "reorder", "threshold", "replenish", "replenishment"]):
+        expanded.update(["min", "minimum", "replenishment", "reorder", "rules", "stock", "level"])
+    if any(w in expanded for w in ["maximum", "max"]):
+        expanded.update(["max", "maximum"])
+    if any(w in expanded for w in ["quantity", "qty", "stock", "inventory", "balance", "balances", "depleted", "shortage"]):
+        expanded.update(["qty", "quantity", "stock", "balances", "items", "warehouse"])
+
+    # Parties: Suppliers & Customers
+    if any(w in expanded for w in ["supplier", "suppliers", "vendor", "vendors", "procure", "procurement", "buy", "bought", "purchasing"]):
+        expanded.update(["supplier", "suppliers", "vendor", "party", "parties", "procurement", "purchase"])
+    if any(w in expanded for w in ["customer", "customers", "client", "clients", "buyer", "buyers"]):
+        expanded.update(["customer", "customers", "party", "parties", "sales"])
+
+    # Invoices & Bills (AP vs AR)
+    if any(w in expanded for w in ["bill", "bills", "payable", "payables", "ap", "due", "unpaid", "debt", "owing"]):
+        expanded.update(["invoice", "invoices", "bill", "bills", "amount", "due", "status", "party", "settled"])
+    if any(w in expanded for w in ["invoice", "invoices", "receivable", "receivables", "ar", "overdue"]):
+        expanded.update(["invoice", "invoices", "amount", "due", "status", "party", "settled"])
+
+    # Orders (Sales & Purchase)
+    if any(w in expanded for w in ["order", "orders", "so", "po"]):
+        expanded.update(["order", "orders", "lines", "party", "items"])
+    if any(w in expanded for w in ["sale", "sales", "sold", "selling"]):
+        expanded.update(["sales", "orders", "lines", "party", "items"])
+    if any(w in expanded for w in ["purchase", "purchases", "purchased"]):
+        expanded.update(["procurement", "purchase", "orders", "lines", "party", "items"])
+
+    # Warehouse & Locations
+    if any(w in expanded for w in ["warehouse", "warehouses", "store", "stores", "location", "locations"]):
+        expanded.update(["warehouse", "warehouses", "balances", "stock"])
+
+    # Deliveries & Receipts (GIN & GRN)
+    if any(w in expanded for w in ["delivery", "deliveries", "dispatch", "dispatched", "gin", "ship", "shipped", "shipping"]):
+        expanded.update(["goods", "issue", "notes", "lines", "dispatch", "sales", "orders"])
+    if any(w in expanded for w in ["receipt", "receipts", "receiving", "grn", "inbound"]):
+        expanded.update(["goods", "receipt", "notes", "lines", "procurement", "purchase"])
+
+    # Accounting & GL
+    if any(w in expanded for w in ["accounting", "account", "accounts", "journal", "gl", "ledger", "debit", "credit"]):
+        expanded.update(["chart", "accounts", "journal", "entries", "lines", "fin"])
 
     q_lower = (question or "").lower()
     scores = []
@@ -265,8 +336,14 @@ def _relevant_tables(schema, question: str, limit: int = 16):
             col_terms.update(re.findall(r"[a-z0-9]+", column.lower()))
         col_terms = variants(col_terms)
         score = 4 * len(expanded & table_terms) + len(expanded & col_terms)
-        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_")) and not any(k in q_lower for k in ("jewelry", "money", "exchange", "construction", "boq")):
-            score -= 8
+
+        # Primary transactional table boost
+        if table in _PRIMARY_TABLE_BOOSTS and (expanded & table_terms or any(c in expanded for c in columns)):
+            score += _PRIMARY_TABLE_BOOSTS[table]
+
+        # Deprioritize unrelated specialist verticals unless specifically requested
+        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_")) and not any(k in q_lower for k in ("jewelry", "gold", "silver", "karigar", "money", "exchange", "currency", "construction", "boq")):
+            score -= 12
         if score > 0:
             scores.append((score, table))
 
@@ -275,6 +352,18 @@ def _relevant_tables(schema, question: str, limit: int = 16):
     if not selected:
         selected = sorted(schema["tables"])[:limit]
 
+    # ForeignKey parent table resolution: always include vital FK targets
+    fk_targets = []
+    for table in selected:
+        for col in schema["tables"].get(table, {}):
+            target = _CORE_FK_MAP.get(col)
+            if target and target in schema["tables"] and target not in selected and target not in fk_targets:
+                fk_targets.append(target)
+    for target in fk_targets:
+        if len(selected) < limit + 4:
+            selected.append(target)
+
+    # Connected relationships
     connected = set(selected)
     for left, _, right, _ in schema["relationships"]:
         if left in selected:
@@ -282,7 +371,8 @@ def _relevant_tables(schema, question: str, limit: int = 16):
         if right in selected:
             connected.add(left)
     for table in sorted(connected - set(selected))[:4]:
-        selected.append(table)
+        if len(selected) < limit + 6:
+            selected.append(table)
 
     return _format_schema_context(schema, selected)
 
@@ -320,7 +410,7 @@ def get_business_schema_context(
     question: str,
     tenant_identifier: str = None,
     force: bool = False,
-    table_limit: int = 14,
+    table_limit: int = 20,
 ) -> str:
     """Provide a cached, tenant-specific schema hint to the LLM."""
     tenant_db = resolve_tenant_database(tenant_identifier)

@@ -16,7 +16,40 @@ Include only datasets whose fields can establish the requested result. Do not qu
 
 QUERY CONTRACT
 Preserve the requested entity, exact identifiers, metric, comparison direction/inclusivity, threshold, dates, currency and status. List requests return individual record identities and relevant amounts/status/dates. Aggregation requires an aggregate request; unrelated terminal totals or return datasets cannot replace a receipt list. Do not add filters merely because records look synthetic.
-Use COUNT for counts, SUM for totals and HAVING for aggregate comparisons. In HAVING, use only standard operators (=, !=, <, <=, >, >=) with numeric constants or selected aliases; never write natural language conditions in HAVING. Group selected nonaggregate fields. Query independent measures separately to prevent multiplied totals. When a request compares an aggregate (such as total outstanding balance_due) against the latest or earliest individual record (such as the latest invoice's amount_due), return two plans: one grouped aggregate plan and one individual-record plan ordered by transaction date and ID descending. In core_parties: type='supplier' identifies suppliers. In finance_invoices: type='ap' represents supplier/purchase invoices (Accounts Payable) and type='ar' represents customer/sales invoices (Accounts Receivable); do not filter type='purchase' or 'sales'. Supplier outstanding balance is calculated by aggregating (SUM) finance_invoices.amount_due for supplier AP invoices (finance_invoices.party_id = core_parties.id) grouped by core_parties.id. In order_by, always give selected fields an explicit alias in select (e.g., alias="invoice_id", alias="invoice_date") and sort by that exact alias. Preserve currency/UOM dimensions; never sum unlike units. Use verified transaction-period fields, not convenient created_at fields on related entities.
+Use COUNT for counts, SUM for totals and HAVING for aggregate comparisons. In HAVING, use only standard operators (=, !=, <, <=, >, >=) with numeric constants or selected aliases; never write natural language conditions in HAVING. Group selected nonaggregate fields. Query independent measures separately to prevent multiplied totals. When a request compares an aggregate (such as total outstanding balance_due) against the latest or earliest individual record (such as the latest invoice's amount_due), return two plans: one grouped aggregate plan and one individual-record plan ordered by transaction date and ID descending.
+
+CORE DATABASE RELATIONSHIPS & DOMAIN CONVENTIONS:
+1. Parties (Customers & Suppliers):
+   - Table: `core_parties` (columns: id, first_name, last_name, code, type).
+   - In `core_parties`, type='supplier' identifies suppliers; type='customer' identifies customers.
+   - For party name, select `first_name` (alias="first_name") and `last_name` (alias="last_name") or `first_name` (alias="party_name").
+2. Invoices & Bills (AP vs AR):
+   - Table: `finance_invoices` (columns: id, invoice_number, party_id, type, amount_due, amount_settled, status, invoice_date, due_date).
+   - `type='ap'` represents Supplier Purchase Invoices / Bills (Accounts Payable). For unpaid/outstanding bills, filter `finance_invoices.type='ap'` and `finance_invoices.amount_due > 0` (or `status != 'paid'`). Join `core_parties` ON `finance_invoices.party_id = core_parties.id`.
+   - `type='ar'` represents Customer Sales Invoices (Accounts Receivable). For unpaid/outstanding invoices, filter `finance_invoices.type='ar'` and `finance_invoices.amount_due > 0`. Join `core_parties` ON `finance_invoices.party_id = core_parties.id`.
+   - Do NOT query `procurement_supplier_bills` for supplier bills or invoices; all operational tenant invoices and bills are maintained in `finance_invoices`.
+3. Sales Orders & Order Lines:
+   - `sales_orders` (columns: id, so_number, party_id, warehouse_id, order_date, expected_delivery, grand_total, status).
+   - `sales_order_lines` (columns: id, sales_order_id, item_id, quantity, fulfilled_quantity, unit_price).
+   - Joins: `sales_orders.party_id = core_parties.id`, `sales_order_lines.sales_order_id = sales_orders.id`, `sales_order_lines.item_id = inventory_items.id`.
+   - Total sales by customer: aggregate SUM(sales_orders.grand_total) grouped by core_parties.id, core_parties.first_name.
+   - Which customers purchased an item: query `sales_order_lines` joined to `sales_orders` on `sales_order_id = sales_orders.id`, joined to `core_parties` on `sales_orders.party_id = core_parties.id`, joined to `inventory_items` on `sales_order_lines.item_id = inventory_items.id`.
+4. Purchase Orders & Order Lines:
+   - `procurement_purchase_orders` (columns: id, po_number, party_id, warehouse_id, order_date, expected_delivery, grand_total, status).
+   - `procurement_purchase_order_lines` (columns: id, purchase_order_id, item_id, quantity, received_quantity, billed_quantity, unit_price).
+   - Joins: `procurement_purchase_orders.party_id = core_parties.id`, `procurement_purchase_order_lines.purchase_order_id = procurement_purchase_orders.id`, `procurement_purchase_order_lines.item_id = inventory_items.id`.
+   - Which suppliers supplied an item: query `procurement_purchase_order_lines` joined to `procurement_purchase_orders` on `purchase_order_id = procurement_purchase_orders.id`, joined to `core_parties` on `procurement_purchase_orders.party_id = core_parties.id`, joined to `inventory_items` on `procurement_purchase_order_lines.item_id = inventory_items.id`.
+5. Warehouses & Physical Inventory:
+   - `core_warehouses` (columns: id, name, code, is_active).
+   - `inventory_stock_balances` (columns: id, item_id, warehouse_id, qty_on_hand, qty_available, qty_allocated, qty_held).
+   - `inventory_items` (columns: id, sku, name, status, has_stocks, category_id, brand_id).
+   - Joins: `inventory_stock_balances.item_id = inventory_items.id`, `inventory_stock_balances.warehouse_id = core_warehouses.id`.
+   - Stock by warehouse: aggregate SUM(inventory_stock_balances.qty_on_hand) grouped by core_warehouses.id, core_warehouses.name.
+6. Deliveries (GIN) & Receipts (GRN):
+   - `sales_goods_issue_notes` (columns: id, gin_number, sales_order_id, party_id, warehouse_id, dispatch_date, status).
+   - `procurement_goods_receipt_notes` (columns: id, grn_number, purchase_order_id, party_id, warehouse_id, received_date, status).
+   - Joins: `sales_goods_issue_notes.sales_order_id = sales_orders.id`, `procurement_goods_receipt_notes.purchase_order_id = procurement_purchase_orders.id`.
+In order_by, always give selected fields an explicit alias in select (e.g., alias="invoice_id", alias="invoice_date") and sort by that exact alias. Preserve currency/UOM dimensions; never sum unlike units. Use verified transaction-period fields, not convenient created_at fields on related entities.
 Numeric expressions support nested +,-,*,/ with numeric verified references or finite constants; zero division yields NULL. Date-only timestamp comparisons cover full business-calendar days; explicit timestamps retain their precision. Resolve dates from the application clock, never prior examples.
 Use physical table names; repeated roles require unique aliases used consistently. Default to 50 rows with stable identity/group-key ordering. Smaller windows require an explicit count or ranking request. Pagination preserves the same filters/order. A page is not a full-scope total.
 General item discovery uses the general item master unless the request/context or verified relationship establishes a specialist module. Retain the established sales/purchasing channel in follow-ups. Do not mix item stock thresholds with transaction quantity limits or discount conditions.
