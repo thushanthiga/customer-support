@@ -44,13 +44,12 @@ Compare each planned field, filter, grouping and aggregate back to the original 
   * For questions like 'hot selling things', 'items in demand', 'top selling items', 'bestsellers', 'popular items':
   * Base table: sales_order_lines
   * Joins:
-    LEFT JOIN sales_orders ON sales_orders.id = sales_order_lines.sales_order_id
-    LEFT JOIN inventory_items ON inventory_items.id = sales_order_lines.item_id
+    INNER JOIN sales_orders ON sales_orders.id = sales_order_lines.sales_order_id
+    INNER JOIN inventory_items ON inventory_items.id = sales_order_lines.item_id
   * Select:
     inventory_items.name (alias='item_name')
     inventory_items.sku (alias='sku')
-    sales_order_lines.quantity (aggregate='SUM', alias='total_quantity_sold')
-    sales_order_lines.id (aggregate='COUNT', distinct=True, alias='orders_count')
+    sales_order_lines.quantity (aggregate='SUM', alias='total_quantity_ordered')
   * Filters:
     sales_orders.deleted_at IS NULL
     inventory_items.deleted_at IS NULL
@@ -81,6 +80,8 @@ Reconstruct the user's requested entity, metric, grain, scope and output from th
 
 Do NOT reject sales rankings or demand queries for missing an artificial 30-day filter when no time period was specified by the user. An all-time sales order volume ranking is standard and approved for informal popularity questions.
 Do NOT reject sales volume rankings across products because products have individual units.
+Do NOT reject sales rankings that include or omit orders_count as a supplemental metric.
+Approve standard top-selling / popular item queries when they aggregate sales_order_lines.quantity by item using inner joins to sales_orders and inventory_items.
 
 Approve only if all supported requirements are established by the actual plans and all unavailable components are honestly marked. A partial answer can be approved when its supported subset is independently meaningful. If the SQL shape or meaning is wrong, verdict=revise and give concrete issues tied to plan indexes and requested requirements. If missing information genuinely blocks a useful supported answer, verdict=clarify with one concise question. Accept reasonable disclosed reporting defaults for exploratory questions; do not demand that the customer choose every reporting parameter. Unknown schema details should trigger revision/discovery, not invented semantics. Any uncertainty about correctness must be an explicit issue, not a confident approval. A candidate may propose clarification without any plans. Review whether clarification is actually necessary: if the source and conversational defaults permit a useful answer, verdict=revise and instruct the planner to produce plans using a disclosed basis. Do not approve a question-only response merely because optional metric/period/size preferences were omitted. Approve a clarification only when its blocker is genuine.
 Approval is a model review, not a proof or calibrated confidence score.

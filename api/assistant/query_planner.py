@@ -247,7 +247,7 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
                 {"role": "user", "content": json.dumps({**request, "available_schema": schema}, default=str)},
             ],
             response_format={"type": "json_object"},
-            reasoning_effort=os.getenv("QUERY_REASONING_EFFORT", "medium"),
+            reasoning_effort=os.getenv("QUERY_REASONING_EFFORT", "low"),
             max_completion_tokens=6000,
             store=False,
         )
