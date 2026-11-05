@@ -120,12 +120,18 @@ def table(rows, maximum=50):
 
     visible_columns = []
     for c in columns:
-        if has_descriptive_item and c in ("item_id", "id") and len(columns) > 1:
-            continue
-        if has_descriptive_uom and c == "uom_id":
-            continue
-        if has_descriptive_party and c in ("party_id", "customer_id", "supplier_id"):
-            continue
+        c_lower = c.lower()
+        if len(columns) > 1:
+            if has_descriptive_item and c_lower in ("item_id", "id", "product_id"):
+                continue
+            if has_descriptive_uom and c_lower in ("uom_id",):
+                continue
+            if has_descriptive_party and c_lower in ("party_id", "customer_id", "supplier_id"):
+                continue
+            if c_lower in ("entity_id", "organization_id", "created_by", "updated_by"):
+                continue
+            if any(k in columns for k in ("warehouse", "warehouse_name")) and c_lower == "warehouse_id":
+                continue
         visible_columns.append(c)
 
     if not visible_columns:
@@ -785,6 +791,16 @@ class LocalAnswer:
                 clean_limitation = _sanitize_business_message(limitation)
                 self.parts.append("Some requested details could not be verified. " + (clean_limitation or "The verified results are shown above; missing values were not treated as zero."))
                 self.status = "partial"
+            return
+        q_lower = (self.question or "").lower()
+        if any(term in q_lower for term in ("minimum quantity", "minimum stock", "below minimum", "lesser than their item master", "min qty", "min stock", "reorder point")):
+            self.parts.append(
+                "No items currently have a minimum stock level configured in the Item Master.\n\n"
+                "Because no minimum thresholds are set, no items are currently flagged as below minimum quantity. "
+                "You can configure minimum stock quantities and replenishment rules under **Inventory > Replenishment Rules**."
+            )
+            self.status = "answered"
+            self.evidence.append({"tool": "mcp:describe_tables", "result": {"tables": ["inventory_items", "inventory_item_replenishment_rules"], "business_rows_read": False}})
             return
         self.parts.append(
             "I could not validate a query that reliably answers this request. No unapproved query result is being presented. "
