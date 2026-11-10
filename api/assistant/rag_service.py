@@ -185,6 +185,23 @@ def _documented_sidebar_paths(context: str) -> list[str]:
     return list(dict.fromkeys(paths))
 
 
+def format_verified_navigation_answer(context: str) -> str | None:
+    """Format verified navigation path(s) extracted from documentation context."""
+    paths = _documented_sidebar_paths(context)
+    if not paths:
+        return None
+    if len(paths) == 1:
+        path = paths[0]
+        screen = path.split(" ➔ ")[-1]
+        return f"You can find **{screen}** at **{path}**."
+    lines = []
+    for path in paths:
+        screen = path.split(" ➔ ")[-1]
+        lines.append(f"- **{screen}** — **{path}**")
+    lines.append("\nWhich one are you looking for?")
+    return "\n".join(lines)
+
+
 def retrieve_navigation_chunks(query: str, top_k: int = 5) -> Tuple[str, List[Dict[str, Any]]]:
     """Retrieve route-bearing documentation chunks matching the user's navigation query."""
     subject_terms = _query_terms(query)
@@ -224,6 +241,6 @@ def retrieve_navigation_chunks(query: str, top_k: int = 5) -> Tuple[str, List[Di
             "hierarchy": chunk.section_hierarchy,
             "similarity_score": round(score, 4),
             "preview": chunk.content[:200] + ("..." if len(chunk.content) > 200 else ""),
-            "match_type": "navigation_route_retrieval",
+            "match_type": "navigation_terms_and_route",
         })
     return "\n\n---\n\n".join(context_pieces), references

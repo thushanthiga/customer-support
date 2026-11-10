@@ -45,18 +45,21 @@ def get_root_connection():
 
 def resolve_tenant_database(tenant_identifier: str = None) -> str:
     """Safely resolves a tenant domain or tenant ID into an authorized tenant database name."""
-    if tenant_identifier is None or str(tenant_identifier).strip().lower() in {"", "localhost", "127.0.0.1", "default"}:
+    raw = str(tenant_identifier or "").strip().lower()
+    if ":" in raw:
+        raw = raw.split(":", 1)[0]
+    if not raw or raw in {"localhost", "127.0.0.1", "default"}:
         if ALLOW_DEFAULT_TENANT:
             return DEFAULT_TENANT_ID
         raise LookupError("A tenant identifier is required.")
     if not isinstance(tenant_identifier, str):
         raise ValueError("Tenant identifier must be a registered domain or tenant ID.")
 
-    identifier = tenant_identifier.strip().lower()
-    if ":" in identifier:
-        identifier = identifier.split(":", 1)[0]
-    if identifier in {"localhost", "127.0.0.1", DEFAULT_TENANT_ID.lower()}:
-        return DEFAULT_TENANT_ID
+    identifier = raw
+    if identifier == DEFAULT_TENANT_ID.lower():
+        if ALLOW_DEFAULT_TENANT:
+            return DEFAULT_TENANT_ID
+        raise LookupError("A tenant identifier is required.")
     if not SAFE_NAME_PATTERN.match(identifier):
         raise ValueError("Tenant identifier is invalid.")
 
@@ -82,13 +85,9 @@ def resolve_tenant_database(tenant_identifier: str = None) -> str:
                     if re.match(r"^apptimate_[a-zA-Z0-9_]+$", target_db):
                         return target_db
     except Exception as e:
-        if ALLOW_DEFAULT_TENANT:
-            return DEFAULT_TENANT_ID
         logger.error(f"Error resolving tenant database for '{identifier}': {e}")
         raise RuntimeError("Could not resolve the requested tenant database.") from e
 
-    if ALLOW_DEFAULT_TENANT:
-        return DEFAULT_TENANT_ID
     raise LookupError("The requested domain or tenant is not registered.")
 
 
@@ -143,3 +142,60 @@ def _serialize_decimals(data):
     if isinstance(data, (date, datetime, time)):
         return data.isoformat()
     return data
+
+
+def _resolve_items_fuzzy(item_name: str, cursor):
+    """Resolve item candidates fuzzy by name or sku."""
+    cursor.execute(
+        "SELECT id, name, sku, status, has_stocks FROM inventory_items "
+        "WHERE deleted_at IS NULL AND (name LIKE %s OR sku LIKE %s) LIMIT 10",
+        (f"%{item_name}%", f"%{item_name}%"),
+    )
+    return cursor.fetchall() or []
+
+
+def get_item_stock_and_rules(item_name: str, tenant_identifier: str = None) -> dict:
+    """Fetch item details, stock balances, and replenishment rules for an item query."""
+    tenant_db = resolve_tenant_database(tenant_identifier)
+    with get_tenant_connection(tenant_db) as conn:
+        with conn.cursor() as cursor:
+            items = _resolve_items_fuzzy(item_name, cursor)
+            if not items:
+                return {"found": False, "items": []}
+            result_items = []
+            for it in items:
+                cursor.execute(
+                    "SELECT organization_id, min_stock_level, max_stock_level, reorder_point, reorder_qty, unit, is_available_purchase "
+                    "FROM inventory_item_replenishment_rules WHERE item_id = %s",
+                    (it["id"],),
+                )
+                rules = cursor.fetchone() or {}
+                org_id = rules.get("organization_id", 1)
+                cursor.execute(
+                    "SELECT SUM(qty_available) AS total_available, SUM(qty_on_hand) AS total_on_hand "
+                    "FROM inventory_stock_balances WHERE item_id = %s AND organization_id = %s",
+                    (it["id"], org_id),
+                )
+                balances = cursor.fetchone() or {}
+                cursor.execute(
+                    "SELECT w.id, w.name, sb.qty_available_without_batch "
+                    "FROM core_warehouses w LEFT JOIN inventory_stock_balances sb ON w.id = sb.warehouse_id "
+                    "WHERE w.organization_id = %s AND w.deleted_at IS NULL",
+                    (org_id,),
+                )
+                cursor.fetchall()
+                result_items.append({
+                    "item_id": it["id"],
+                    "item_name": it.get("name"),
+                    "sku": it.get("sku"),
+                    "status": it.get("status"),
+                    "has_stocks": it.get("has_stocks", False),
+                    "pricing_checked": False,
+                    "stock_levels": {
+                        "min_stock_level": rules.get("min_stock_level"),
+                        "max_stock_level": rules.get("max_stock_level"),
+                        "reorder_point": rules.get("reorder_point"),
+                    },
+                    "balances": balances,
+                })
+            return {"found": True, "items": result_items}

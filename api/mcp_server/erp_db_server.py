@@ -52,7 +52,7 @@ DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 500
 MAX_CELL_CHARS = 500
 
-_DATABASE_RE = re.compile(r"^apptimate_[A-Za-z0-9_]+$")
+_DATABASE_RE = re.compile(r"^(?:apptimate_[A-Za-z0-9_]+|test)$")
 _SENSITIVE_COLUMN_RE = re.compile(r"password|passwd|token|secret|credential|private_?key|api_?key", re.I)
 _FORBIDDEN_SQL_RE = re.compile(
     r"\b(?:INSERT|UPDATE|DELETE|ALTER|DROP|CREATE|TRUNCATE|RENAME|GRANT|REVOKE|LOCK|UNLOCK|CALL|"

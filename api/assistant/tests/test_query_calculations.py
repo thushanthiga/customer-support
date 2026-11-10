@@ -8,11 +8,14 @@ class CalculatedQueryTests(SimpleTestCase):
     schema={'tables':{'finance_invoices':{'id':'int','amount_due':'decimal','amount_settled':'decimal','created_at':'datetime','status':'varchar'}},'relationships':set()}
 
     def execute(self,field,filters=(),**kwargs):
-        engine=MagicMock()
-        conn=engine.return_value.connect.return_value.__enter__.return_value
-        conn.execute.return_value.mappings.return_value.all.return_value=[]
+        conn=MagicMock()
+        def fake_mcp_run_select(sql, database="", page_size=50, offset=0, include_total=False, params=None):
+            conn.execute(sql, params)
+            return {"rows": [], "has_more": False, "elapsed_ms": 1, "read_at": "2026-11-05T00:00:00"}
         plan={'base_table':'finance_invoices','select':[field],'filters':list(filters),**kwargs}
-        with patch('assistant.query_service.resolve_tenant_database',return_value='test'),patch('assistant.query_service._schema_for',return_value=self.schema),patch('assistant.query_service.get_tenant_engine',engine):
+        with patch('assistant.query_service.resolve_tenant_database',return_value='test'), \
+             patch('assistant.query_service._schema_for',return_value=self.schema), \
+             patch('assistant.mcp_client.mcp_run_select', side_effect=fake_mcp_run_select):
             result=query_business_data(plan,'test')
         return result,conn
 
@@ -36,7 +39,7 @@ class CalculatedQueryTests(SimpleTestCase):
     def test_numeric_constants_are_bound_and_zero_division_is_null(self):
         result,conn=self.execute(self.expression('/',0))
         self.assertNotIn('error',result)
-        self.assertIn('NULLIF(:p0, 0)',str(conn.execute.call_args.args[0]))
+        self.assertIn('NULLIF(%(p0)s, 0)',str(conn.execute.call_args.args[0]))
         self.assertEqual(conn.execute.call_args.args[1]['p0'],0)
 
     def test_arithmetic_cannot_bypass_field_validation_or_inject_sql(self):
@@ -54,7 +57,7 @@ class CalculatedQueryTests(SimpleTestCase):
         params=conn.execute.call_args.args[1]
         self.assertEqual(params['p0'],'2026-09-29 18:30:00')
         self.assertEqual(params['p1'],'2026-09-30 18:30:00')
-        self.assertIn('t0.`created_at` < :p1',str(conn.execute.call_args.args[0]))
+        self.assertIn('t0.`created_at` < %(p1)s',str(conn.execute.call_args.args[0]))
 
     def test_explicit_timestamp_is_not_reinterpreted_as_a_whole_day(self):
         result,conn=self.execute({'table':'finance_invoices','column':'id'},[
@@ -81,10 +84,14 @@ class CalculatedQueryTests(SimpleTestCase):
 
     def test_generic_config_values_are_scoped_to_public_base_currency_key(self):
         self.schema={'tables':{'core_config':{'id':'int','key':'varchar','value':'text'}},'relationships':set()}
-        engine=MagicMock();conn=engine.return_value.connect.return_value.__enter__.return_value
-        conn.execute.return_value.mappings.return_value.all.return_value=[]
-        with patch('assistant.query_service.resolve_tenant_database',return_value='test'),patch('assistant.query_service._schema_for',return_value=self.schema),patch('assistant.query_service.get_tenant_engine',engine):
+        conn = MagicMock()
+        def fake_mcp(sql, database="", page_size=50, offset=0, include_total=False, params=None):
+            conn.execute(sql, params)
+            return {"rows": [], "has_more": False, "elapsed_ms": 1, "read_at": "2026-11-05T00:00:00"}
+        with patch('assistant.query_service.resolve_tenant_database',return_value='test'), \
+             patch('assistant.query_service._schema_for',return_value=self.schema), \
+             patch('assistant.mcp_client.mcp_run_select', side_effect=fake_mcp):
             result=query_business_data({'base_table':'core_config','select':[{'table':'core_config','column':'value'}]},'test')
         self.assertNotIn('error',result)
-        self.assertIn('WHERE t0.`key` = :p0',str(conn.execute.call_args.args[0]))
+        self.assertIn('WHERE t0.`key` = %(p0)s',str(conn.execute.call_args.args[0]))
         self.assertEqual(conn.execute.call_args.args[1]['p0'],'base_currency')

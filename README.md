@@ -128,11 +128,6 @@ Then, from `support-assistant/api`, verify them and replay recorded catalogue pl
 The fixture verifier only connects to local MySQL and blocks model generation.
 The offline endpoint evaluator does not replace GPT-6 Luna with another model;
 cases requiring query planning report a failure while model calls are disabled.
-See [the existing 164-case report](QA/catalogue-164-verification.md) for its recorded
-evidence and limitations. That historical report does not certify server deployment.
-
-For server environment, ERP path and production start commands, see
-[DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Evaluation files and caching
 
@@ -258,3 +253,10 @@ the first attempt, and for a customer-performance ranking after two repair attem
 An exact proprietary-score request correctly asked for its missing formula. No
 production records were used. The repairs show that model interpretation and
 latency remain variable; these checks do not establish perfect understanding.
+
+## Reproducible evaluation
+
+Run `make eval` for offline component and routing/RAG regression gates. The strict
+full suite still contains inherited failures; this gate does not certify live
+answer accuracy. See [evaluation instructions](eval/README.md) and the
+[2026-11-06 measured report](eval/REPORT.md) for coverage, limitations and live-run prerequisites.

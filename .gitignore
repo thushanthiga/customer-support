@@ -29,3 +29,7 @@
 .DS_Store
 **/.DS_Store
 
+# Local evaluation harness, benchmarks, and traces
+/eval/
+/Makefile
+/.github/

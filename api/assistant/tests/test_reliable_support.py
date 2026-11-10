@@ -154,3 +154,137 @@ class AnalyticsCompilerTests(SimpleTestCase):
             plan_question('Total invoices', 'verified schema', failures=['Unknown column: revenue'])
         request = json.loads(provider.call_args.kwargs['messages'][1]['content'])
         self.assertEqual(request['validation_feedback'], ['Unknown column: revenue'])
+
+    def test_seasonal_restocking_synthesis_and_chaining(self):
+        plan_0 = {
+            'base_table': 'sales_goods_issue_note_lines',
+            'select': [
+                {'table': 'inventory_items', 'column': 'id', 'alias': 'item_id'},
+                {'table': 'inventory_items', 'column': 'name', 'alias': 'item_name'},
+                {'table': 'inventory_items', 'column': 'sku', 'alias': 'sku'},
+                {'table': 'sales_goods_issue_notes', 'column': 'dispatch_date', 'alias': 'dispatch_month'},
+                {'table': 'sales_goods_issue_note_lines', 'column': 'dispatch_quantity', 'aggregate': 'SUM', 'alias': 'total_units_sold'},
+                {'table': 'sales_goods_issue_notes', 'column': 'id', 'aggregate': 'COUNT', 'distinct': True, 'alias': 'sales_frequency'},
+            ],
+            'joins': [
+                {'table': 'sales_goods_issue_notes', 'left_table': 'sales_goods_issue_note_lines', 'left_column': 'goods_issue_note_id', 'right_column': 'id'},
+                {'table': 'inventory_items', 'left_table': 'sales_goods_issue_note_lines', 'left_column': 'item_id', 'right_column': 'id'},
+            ],
+            'group_by': [
+                {'table': 'inventory_items', 'column': 'id'},
+                {'table': 'inventory_items', 'column': 'name'},
+                {'table': 'inventory_items', 'column': 'sku'},
+                {'table': 'sales_goods_issue_notes', 'column': 'dispatch_date'},
+            ],
+        }
+        plan_1 = {
+            'base_table': 'inventory_items',
+            'select': [
+                {'table': 'inventory_items', 'column': 'id', 'alias': 'item_id'},
+                {'table': 'inventory_items', 'column': 'name', 'alias': 'item_name'},
+                {'table': 'inventory_items', 'column': 'sku', 'alias': 'sku'},
+                {'table': 'inventory_stock_balances', 'column': 'qty_available', 'aggregate': 'SUM', 'coalesce': 0, 'alias': 'available_quantity'},
+            ],
+            'joins': [
+                {'table': 'inventory_stock_balances', 'left_table': 'inventory_items', 'left_column': 'id', 'right_column': 'item_id'},
+            ],
+            'group_by': [
+                {'table': 'inventory_items', 'column': 'id'},
+                {'table': 'inventory_items', 'column': 'name'},
+                {'table': 'inventory_items', 'column': 'sku'},
+            ],
+        }
+
+        reply_0 = {
+            'results': [
+                {'item_id': 101, 'item_name': 'Munchee 50g', 'sku': 'BIS-BRN-01', 'dispatch_month': 202608, 'total_units_sold': 30, 'sales_frequency': 13},
+                {'item_id': 102, 'item_name': 'Batch without variant', 'sku': 'BLO-BRN-09', 'dispatch_month': 202608, 'total_units_sold': 10, 'sales_frequency': 2},
+                {'item_id': 103, 'item_name': 'Kurthi set', 'sku': 'BLO-BRN-13', 'dispatch_month': 202608, 'total_units_sold': 2, 'sales_frequency': 2},
+                {'item_id': 104, 'item_name': 'A-batch', 'sku': 'batch-100', 'dispatch_month': 202607, 'total_units_sold': 11, 'sales_frequency': 2},
+                {'item_id': 104, 'item_name': 'A-batch', 'sku': 'batch-100', 'dispatch_month': 202608, 'total_units_sold': 2, 'sales_frequency': 2},
+            ],
+            'query_audit': {'selected_fields': plan_0['select']},
+            'compiled_sql': 'SELECT ... FROM sales_goods_issue_note_lines ...',
+        }
+
+        reply_1 = {
+            'results': [
+                {'item_id': 101, 'item_name': 'Munchee 50g', 'sku': 'BIS-BRN-01', 'available_quantity': 0},
+                {'item_id': 102, 'item_name': 'Batch without variant', 'sku': 'BLO-BRN-09', 'available_quantity': 0},
+                {'item_id': 103, 'item_name': 'Kurthi set', 'sku': 'BLO-BRN-13', 'available_quantity': 1},
+                {'item_id': 104, 'item_name': 'A-batch', 'sku': 'batch-100', 'available_quantity': 319},
+            ],
+            'query_audit': {'selected_fields': plan_1['select']},
+            'compiled_sql': 'SELECT ... FROM inventory_items WHERE id IN (101, 102, 103, 104) ...',
+        }
+
+        candidate = {
+            'plans': [plan_0, plan_1],
+            'query_review': {'verdict': 'approve'},
+            'analysis_contract': {
+                'goal': 'Review sales over time for seasonal demand patterns and compare with available stock.',
+                'entity': 'Inventory items',
+                'metric': 'Units sold, sales frequency, and available stock',
+                'scope': 'All recorded dispatch history and current stock balances',
+                'requirements': [{'status': 'supported'}, {'status': 'supported'}],
+            },
+        }
+
+        executed_plans = []
+        def mock_query(plan, *args, **kwargs):
+            executed_plans.append(plan)
+            if len(executed_plans) == 1:
+                return reply_0
+            return reply_1
+
+        with patch('assistant.local_engine.query_service.get_business_schema_context', return_value='schema'), \
+             patch('assistant.local_engine.query_service._schema_for', return_value={'tables': {}}), \
+             patch('assistant.local_engine.plan_question', return_value=candidate), \
+             patch.object(LocalAnswer, 'query', side_effect=mock_query):
+            ans = LocalAnswer('apptimate_test', {}, 'what is the seasonal things need to be restore')
+            result = ans.run()
+
+        self.assertEqual(len(executed_plans), 2)
+        chained_filters = executed_plans[1].get('filters', [])
+        id_filter = next((f for f in chained_filters if f.get('column') == 'id'), None)
+        self.assertIsNotNone(id_filter)
+        self.assertEqual(id_filter['operator'], 'IN')
+        self.assertEqual(set(id_filter['value']), {101, 102, 103, 104})
+
+        self.assertIn('Seasonal Restocking & Inventory Assessment', result['response'])
+        self.assertIn('August 2026', result['response'])
+
+        self.assertIn('Immediate Restock Needed', result['response'])
+        self.assertIn('Munchee 50g', result['response'])
+        self.assertIn('Batch without variant', result['response'])
+        self.assertIn('0 Available Stock', result['response'])
+
+        self.assertIn('Kurthi set', result['response'])
+        self.assertIn('A-batch', result['response'])
+
+        self.assertIn('Comprehensive Restocking Assessment Table', result['response'])
+        self.assertEqual(len(result['data_pages']), 2)
+
+        audit_occurrences = result['response'].count('### 🔍 Technical Execution & Pipeline Audit')
+        self.assertEqual(audit_occurrences, 1)
+
+    def test_invoice_creation_classification_and_retrieval(self):
+        from assistant.local_engine import classify_query
+        from assistant import doc_retrieval
+        from assistant.prompts import build_support_prompt
+
+        # 1. Classification is fast-path document
+        cls = classify_query("why I am not able to create invoices")
+        self.assertEqual(cls["classification"], "document")
+
+        # 2. Heuristic queries expand to fulfillment and dispatch
+        queries = doc_retrieval._heuristic_queries("why I am not able to create invoices")
+        self.assertTrue(any("Dispatch Goods & Generate Invoice" in q for q in queries))
+
+        # 3. Prompt explicitly instructs authoritative expert tone and forbids disclaimers
+        prompt = build_support_prompt("apptimate_infinity", "apptimate_infinity", "", "")
+        self.assertIn("NEVER use meta-language or disclaimers", prompt)
+        self.assertIn("Dispatch Goods & Generate Invoice", prompt)
+        self.assertIn("Sales Orders", prompt)
+        self.assertIn("/sales/invoices", prompt)
+        self.assertIn("You ARE the authoritative ERP support assistant", prompt)

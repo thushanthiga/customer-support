@@ -16,10 +16,11 @@ from .db_service import get_tenant_connection, resolve_tenant_database
 from .erp_access import is_analytics_admin, principal_from_request, principal_scope
 from .local_engine import LocalAnswer
 from .models import ChatUsageLog, DocumentChunk, UploadedDocument
+from .query_service import query_business_data
 
 logger = logging.getLogger(__name__)
 
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-6-luna")
+CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
 
 
 @csrf_exempt
@@ -236,6 +237,8 @@ def chat_query(request):
         tenant_db = resolve_tenant_database(tenant_identifier)
         principal = principal_from_request(request, tenant_db)
         username = f"erp:{tenant_db}:{principal['user_id']}"
+        logger.info("[STEP 1: HTTP REQUEST] Received /api/chat/ from user=%s session_id=%s tenant_db=%s question=%r",
+                    username, session_id, tenant_db, user_message)
         recent = list(
             ChatUsageLog.objects.filter(user_id=username, session_id=session_id).order_by("-created_at")[:5]
         )
@@ -324,6 +327,8 @@ def chat_query(request):
                 "classification_source": "openai" if usage.get("total_tokens", 0) else "service",
             },
         })
+        logger.info("[STEP 6: HTTP RESPONSE] Returning response for session_id=%s: status=%s, search_type=%s, total_tokens=%d",
+                    session_id, payload.get("kind"), source_type, usage.get("total_tokens", 0))
         return JsonResponse(payload)
     except Exception as e:
         logger.error(f"Error in chat_query: {e}", exc_info=True)
