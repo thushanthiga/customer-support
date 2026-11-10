@@ -397,7 +397,7 @@ def classify_query(question: str, history: tuple = ()) -> dict:
     # Guardrail 1: Mutation, Write & Prompt Injection Detection
     # Intercept commands attempting to mutate database or tamper with instructions, unless asking for software guidance.
     guidance = bool(re.search(
-        r"\b(?:how (?:do i|can i|to|do we|can we|should we|should i|would we)|where (?:can i|do i|is|are|can we|do we)|can (?:i|an admin|we|a user|you)|shall (?:we|i)|should (?:we|i)|could (?:we|i)|is it possible|is there a way|is there an option|guide|steps|navigate|flow|workflow|process|lifecycle|overview|walk\s+me\s+through)\b",
+        r"\b(?:how (?:do i|can i|to|do we|can we|should we|should i|would we)|where (?:can i|do i|is|are|can we|do we)|shall (?:we|i)|should (?:we|i)|could (?:we|i)|is it possible|is there a way|is there an option|guide|steps|navigate|flow|workflow|process|lifecycle|overview|walk\s+me\s+through|what (?:should|can|do) (?:i|we) (?:do|change)|can (?:i|an admin|we|a user|you)\s+(?:add|apply|configure|create|update|delete|modify|edit|set|enable|disable|use|generate))\b",
         q_lower,
     ))
     mutation_patterns = (
@@ -446,6 +446,21 @@ def classify_query(question: str, history: tuple = ()) -> dict:
     if re.fullmatch(r"(?:hi|hello|hey|thanks|thank you|ok|okay)[.! ]*", q_lower):
         res = {"classification": "general", "reason": "Conversational acknowledgement."}
         logger.info("[STEP 2: QUERY CLASSIFICATION RESULT] Fast-path general greeting")
+        return res
+
+    # Fast path: user asserting or asking about recorded transaction / data checks
+    # e.g., "I have added a sales for 10000", "nope I have added a sales for 10000", "can you check is there any sales worth of 100000", "is there any sales of..."
+    verification_patterns = (
+        r"\b(?:i(?:\x27ve|\s+have)?\s+(?:added|created|entered|recorded|made|posted|placed)\s+(?:an?\s+)?(?:sales?|orders?|invoices?|po|payments?|transactions?|receipts?|quotes?|quotations?|items?|stock))\b",
+        r"\b(?:we(?:\x27ve|\s+have)?\s+(?:added|created|entered|recorded|made|posted|placed)\s+(?:an?\s+)?(?:sales?|orders?|invoices?|po|payments?|transactions?|receipts?|quotes?|quotations?|items?|stock))\b",
+        r"\b(?:(?:can\s+you\s+)?check\s+(?:if\s+there\s+is|is\s+there|if\s+we\s+have|if\s+(?:a|any)\s+(?:sales?|orders?|invoices?)|for\s+(?:any\s+)?(?:sales?|orders?|invoices?|transactions?)))\b",
+        r"\b(?:is\s+there\s+(?:any\s+)?(?:sales?|orders?|invoices?|transactions?))\b",
+        r"\b(?:are\s+there\s+(?:any\s+)?(?:sales?|orders?|invoices?|transactions?))\b",
+        r"\b(?:any\s+(?:sales?|orders?|invoices?|transactions?)\s+(?:worth|with|of|for|amount))\b",
+    )
+    if not guidance and any(re.search(pat, q_lower) for pat in verification_patterns):
+        res = {"classification": "database", "reason": "Query asks to inspect or verify recorded transaction(s) in the ERP database."}
+        logger.info("[STEP 2: QUERY CLASSIFICATION RESULT] Fast-path transaction verification matched: %s", res["reason"])
         return res
 
     # Fast path: database records / aggregates
@@ -520,7 +535,7 @@ def classify_query(question: str, history: tuple = ()) -> dict:
             "You are the Request Classifier for Apptimate One ERP Support.\n"
             "Apptimate One is an enterprise ERP system spanning multiple business verticals and modules: Sales & Invoicing, Procurement & Purchasing, Inventory & Warehousing, Construction & Project Management (BOQ, Rate Cards, Variations/Change Orders, Fuel Logs, Subcontractors, IPCs), Manufacturing & BOMs, Jewelry, POS, Finance & Accounting, and HR & Payroll.\n\n"
             "Classify the user inquiry into exactly one category:\n"
-            "- 'database': Asking to retrieve, filter, count, calculate, or inspect live records/data in the ERP database (items, stock, transactions, orders, invoices, suppliers, customers, prices, balances).\n"
+            "- 'database': Asking to retrieve, filter, count, calculate, or inspect live records/data in the ERP database (items, stock, transactions, orders, invoices, suppliers, customers, prices, balances). IMPORTANT: Statements where the user mentions having added, created, or entered a transaction or record in the ERP (e.g. 'I have added a sales for 10000', 'nope I have added a sales for 10000', 'I created an invoice for 5000', 'is there any sales worth of 100000') MUST ALWAYS be classified as 'database' so the system verifies whether the record exists in the database. NEVER classify statements about business data or transaction additions as 'general' or 'out_of_scope'!\n"
             "- 'database_explanation': Asking how the assistant found, calculated, or determined a database metric, demand, or query result, what tables/logic were used, or asking about the connected database scope.\n"
             "- 'document': Asking about software usage, UI navigation, feature explanation, business rules, setup, architecture, or documentation. (Includes questions about whether or how the system supports a feature or workflow, e.g. 'get me the whole flow of construction', 'how does manufacturing work', 'shall we add the discount on the amount', 'can we add a discount', 'how to update prices', 'where do we configure rules'). Any inquiry regarding an ERP module, system flow, architecture, or process walkthrough MUST ALWAYS be classified as 'document'.\n"
             "- 'hybrid': Needs both live record checks and documented troubleshooting or navigation.\n"
@@ -587,11 +602,26 @@ def _format_query_summary(count: int, plan: dict, fields: list, analysis_contrac
     if "item" in base:
         entity_name = "item(s)"
     elif "order" in base and "line" not in base:
-        entity_name = "order(s)"
+        entity_name = "sales order(s)" if "sales" in base else "order(s)"
     elif "invoice" in base:
         entity_name = "invoice(s)"
     elif "part" in base or "customer" in base or "supplier" in base:
         entity_name = "partner(s)"
+
+    # 2. Exact amount or value lookup
+    exact_amount_filter = None
+    for f in plan.get("filters") or []:
+        if isinstance(f, dict) and f.get("operator") == "=":
+            col = str(f.get("column", "")).lower()
+            if any(k in col for k in ("grand_total", "total", "amount", "price", "worth", "cost")):
+                exact_amount_filter = f.get("value")
+                break
+
+    if exact_amount_filter is not None and not havings and not order_bys:
+        display_val = f"{exact_amount_filter:,}" if isinstance(exact_amount_filter, (int, float)) else f"{exact_amount_filter}"
+        if count == 0:
+            return f"Found **0 matching {entity_name}** with an amount of {display_val}:"
+        return f"Found **{count} matching {entity_name}** with an amount of {display_val}:"
 
     # 2. Threshold comparison queries (HAVING clause present)
     if havings:
@@ -751,7 +781,19 @@ class LocalAnswer:
         if label and not label.lower().startswith("result "):
             summary = f"**{cell(label)}** — " + summary
         if not rows:
-            summary += " No matching records were found within the checked scope; this does not establish absence outside that scope."
+            exact_val = None
+            if plan:
+                for f in plan.get("filters") or []:
+                    if isinstance(f, dict) and f.get("operator") == "=":
+                        col = str(f.get("column", "")).lower()
+                        if any(k in col for k in ("grand_total", "total", "amount", "price", "worth", "cost")):
+                            exact_val = f.get("value")
+                            break
+            if exact_val is not None:
+                display_val = f"{exact_val:,}" if isinstance(exact_val, (int, float)) else f"{exact_val}"
+                summary += f" No sales or transactions with an amount of {display_val} were found within the checked scope; this does not establish absence outside that scope."
+            else:
+                summary += " No matching records were found within the checked scope; this does not establish absence outside that scope."
         elif len(mapped) == 1 and len(mapped[0]) == 1:
             key, value = next(iter(mapped[0].items()))
             summary += f" **{_format_header(key)}: {cell(value)}**."
@@ -1029,6 +1071,9 @@ COMMUNICATION STYLE FOR NON-TECHNICAL CUSTOMERS:
         elif any(w in q_lower for w in ["hello", "hi", "hey", "good morning", "good afternoon"]):
             self.parts.append("Hello! How can I help you today? You can ask me to look up ERP records, list sales or stock data, or guide you through any ERP screen.")
             self.status = "answered"
+        elif any(k in q_lower for k in ("sales", "order", "invoice", "item", "stock", "product", "customer", "supplier")):
+            logger.info("[GENERAL_ANSWER_REPLY] Business entity detected in general query; falling back to generic database search")
+            self.generic_answer(question)
         else:
             self.out_of_scope_reply(question)
 

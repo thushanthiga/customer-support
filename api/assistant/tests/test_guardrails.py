@@ -65,3 +65,24 @@ class GuardrailsTestCase(SimpleTestCase):
                 cls = classify_query(q)
                 self.assertEqual(cls["classification"], "document")
 
+    def test_transaction_verification_queries_classified_as_database(self):
+        verification_queries = [
+            "nope I have added a sales for 10000",
+            "I have added a sales for 10000",
+            "can you check is there any sales worth of 100000",
+            "is there any sales worth of 100000",
+            "check if there is a sale for 10000",
+            "are there any sales of 50000",
+            "I created a sales order of 10000",
+            "I added an invoice for 2000",
+        ]
+        for q in verification_queries:
+            with self.subTest(query=q):
+                cls = classify_query(q)
+                self.assertEqual(cls["classification"], "database")
+
+    def test_transaction_mistake_workflow_query_classified_as_document(self):
+        q = "I have added a sales for 10000 it was mistaken its should 100000 what should I do now"
+        cls = classify_query(q)
+        self.assertEqual(cls["classification"], "document")
+
