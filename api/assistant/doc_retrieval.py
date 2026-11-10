@@ -71,6 +71,9 @@ _SYNONYM_MAP = {
     "supplier": ["supplier", "suppliers", "vendor", "vendors"],
     "invoice": ["invoice", "invoices", "billing", "bill", "fulfill", "dispatch"],
     "invoices": ["invoice", "invoices", "billing", "bill", "fulfill", "dispatch"],
+    "construction": ["construction", "project", "projects", "boq", "variations", "rate-cards", "rate cards", "wbs", "contractors", "fuel logs", "change orders"],
+    "boq": ["boq", "bill of quantities", "estimation", "rate cards", "rates", "construction"],
+    "variations": ["variations", "change orders", "scope", "construction", "project controls"],
 }
 
 _TOKEN_RE = re.compile(r"[a-z][a-z0-9_]*")
@@ -80,6 +83,7 @@ _ROUTE_RE = re.compile(r"sidebar\s*(?:➔|->|›|→)|access\s+flow\s*:|menu\s+e
 _LOCATION_INTENT_RE = re.compile(r"\b(where|which (screen|page|menu)|find|located|navigate|go to|open)\b", re.I)
 _HOWTO_INTENT_RE = re.compile(r"\b(how (do|can|to|should)|steps?|add|create|set ?up|configure|enable|apply|make)\b", re.I)
 _TROUBLE_INTENT_RE = re.compile(r"\b(why|error|not working|cannot|can't|unable|disabled|greyed|grayed|fails?|missing)\b", re.I)
+_FLOW_INTENT_RE = re.compile(r"\b(flow|workflow|process|lifecycle|overview|explain|walk\s+me\s+through|get\s+me\s+the)\b", re.I)
 
 RRF_K = 60
 CANDIDATE_POOL = 36
@@ -210,7 +214,7 @@ def _heuristic_intent(question: str) -> str:
         return "troubleshooting"
     if _LOCATION_INTENT_RE.search(question):
         return "location"
-    if _HOWTO_INTENT_RE.search(question):
+    if _HOWTO_INTENT_RE.search(question) or _FLOW_INTENT_RE.search(question):
         return "how_to"
     return "concept"
 
@@ -218,7 +222,13 @@ def _heuristic_intent(question: str) -> str:
 def _heuristic_queries(question: str) -> List[str]:
     queries = [question]
     q_lower = question.lower()
-    if "discount" in q_lower:
+    if "construction" in q_lower or "boq" in q_lower or "variations" in q_lower:
+        queries.extend([
+            "construction boq rate cards estimation",
+            "construction variations change orders project controls",
+            "construction projects work breakdown structure",
+        ])
+    elif "discount" in q_lower:
         queries.extend([
             "discount control line item amt percent",
             "price rule markdown percentage price lists",

@@ -135,6 +135,34 @@ ERP WORKFLOWS & ARCHITECTURE KNOWLEDGE:
     4. Automated Price Rules: System-wide promotional markdowns and tiered pricing can also be configured under **Sales ➔ Price Lists / Rules**.
   * When a user asks whether or how to add discounts on the amount or in the system, confirm directly that Apptimate One supports amount-based discounts, explain how to select **Amt** mode on transaction lines, and provide the exact steps and prerequisites.
 
+- CONSTRUCTION & PROJECT MANAGEMENT WORKFLOW:
+  * The Construction & Projects module in Apptimate One is engineered for general contractors, civil engineering, and infrastructure project management, providing end-to-end lifecycle governance across estimation, rate analysis, project planning, on-site operations, change controls, and progress billing.
+  * Core Submodules, Screens, and Navigation Routes:
+    1. Estimation & Bill of Quantities (BOQ):
+       - Navigation: **Sidebar ➔ Construction ➔ Estimation & BOQ ➔ BOQ** (`/construction/boq`).
+       - Function: Formulates line items of work, units of measure (UOM), estimated quantities, and assembly unit rates (incorporating materials, labor, plant/equipment hire, and subcontractor costs per unit of work) to establish baseline project budgets and milestone schedules.
+    2. Rate Cards Master:
+       - Navigation: **Sidebar ➔ Construction ➔ Estimation & BOQ ➔ Rate Cards** (`/construction/rate-cards`).
+       - Function: Catalogs standard unit cost libraries across labor trades, machinery/equipment rental rates, and raw material unit prices used in BOQ costing and project bid calculations.
+    3. Project Master & Team Allocation:
+       - Navigation: **Sidebar ➔ Construction ➔ Projects** (`/construction/projects`).
+       - Function: Central repository for all construction projects. Tracks contract values, project codes, client references, project managers, site supervisors, and allocated project team members.
+    4. Variations & Change Orders:
+       - Navigation: **Sidebar ➔ Construction ➔ Project Controls ➔ Variations** (`/construction/variations`).
+       - Function: Formalizes client-requested and engineering scope changes, additions, or omissions. Evaluates financial cost impact, schedule extension days, and client sign-off before committing revisions to project budget and contracts.
+    5. Site Operations & Machinery Fuel Logs:
+       - Navigation: **Sidebar ➔ Construction ➔ Site Operations ➔ Fuel Logs** (`/construction/fuel-logs`).
+       - Function: Records heavy machinery and vehicle fuel consumption, equipment running hours, and on-site workforce attendance to prevent slippage and monitor operating costs.
+    6. Subcontractor Management & Interim Payment Certificates (IPCs):
+       - Navigation: **Sidebar ➔ Construction ➔ Billing ➔ Payment Certificates** (`/construction/ipcs`).
+       - Function: Tracks subcontractor work packages, advances, retention deductions, and Interim Payment Certificates (IPCs) / valuation claims against verified on-site completed work.
+  * End-to-End Construction Flow Walkthrough:
+    1. Phase 1 (Estimation & Bid Preparation): Set up unit rates in **Rate Cards** (`/construction/rate-cards`) ➔ Create Work Breakdown Structure (WBS) and line items in **BOQ** (`/construction/boq`) ➔ Submit bid estimate and finalize client contract.
+    2. Phase 2 (Project Mobilization): Create Project record in **Projects** (`/construction/projects`) ➔ Assign project managers, engineers, and workforce teams ➔ Issue subcontractor work packages.
+    3. Phase 3 (Site Execution & Monitoring): Mobilize equipment and track daily fuel consumption via **Site Fuel Logs** ➔ Record workforce attendance and daily progress logs against BOQ milestone deliverables.
+    4. Phase 4 (Change Management & Variations): When scope changes arise, submit Change Orders under **Variations** (`/construction/variations`) ➔ Assess budget impact and time extension ➔ Obtain client approval to adjust baseline budget.
+    5. Phase 5 (Valuation & Billing): Generate Interim Payment Certificates (IPCs) based on verified on-site work completion ➔ Apply retention percentage ➔ Issue progress billing sales invoices through Finance/Sales.
+
 - LIVE DATABASE ITEM DIAGNOSTICS & TROUBLESHOOTING:
   * When "LIVE DATABASE RECORD DIAGNOSTICS" are present in the prompt:
     1. Always report the actual, verified database facts first for the specific item (exact Item Name, SKU, Status, whether `Is Returnable` is enabled or disabled, available stock quantity, and whether completed sales dispatches exist).

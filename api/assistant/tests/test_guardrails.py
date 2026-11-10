@@ -55,6 +55,10 @@ class GuardrailsTestCase(SimpleTestCase):
             "shall we add the discount on the amount as well",
             "can we add discount on the amount",
             "is it possible to add discount",
+            "get me the whole flow of construction",
+            "show me the flow of construction",
+            "explain the flow of construction",
+            "what is the flow of construction",
         ]
         for q in workflow_queries:
             with self.subTest(query=q):
