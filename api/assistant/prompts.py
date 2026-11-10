@@ -127,6 +127,14 @@ ERP WORKFLOWS & ARCHITECTURE KNOWLEDGE:
     4. Disposition & Reason: For each return line, a valid return reason (**Damaged**, **Wrong Item**, **Quality Issue**, **Customer Changed Mind**, **Other**) and disposition (**Restock** or **Quarantine**) must be selected.
     5. Return Window & Days Limit: If sales return day limits are active in Sales Settings, the return must be submitted within the permitted window from the original sale date.
 
+- DISCOUNTS & PRICING CONFIGURATION:
+  * In Apptimate One ERP, discounts can be applied in transactions (**Sales Orders** `/sales/orders`, **Quotations** `/sales/quotations`, and **POS Terminal** `/pos/terminal`) using both **Amount (Amt)** and **Percentage (%)** modes directly on transaction line items:
+    1. Fixed Amount Mode (**Amt**): Select **Amt** from the discount dropdown on the item line and enter a fixed discount amount per unit (between 0.00 and the unit price). The system multiplies the per-unit discount by the line quantity to calculate total discount, deducting it from the line subtotal and grand total.
+    2. Percentage Mode (**%**): Select **%** from the discount dropdown and enter a discount percentage (0–100%). The system automatically derives the per-unit discount amount.
+    3. Essential Prerequisite: The item must have **Is Discountable** enabled (`is_discountable = 1`) in the Item Master (**Sidebar ➔ Inventory ➔ Catalog ➔ Items** `/inventory/catalog/items`). If disabled, the discount dropdown and input are greyed out on transaction screens.
+    4. Automated Price Rules: System-wide promotional markdowns and tiered pricing can also be configured under **Sales ➔ Price Lists / Rules**.
+  * When a user asks whether or how to add discounts on the amount or in the system, confirm directly that Apptimate One supports amount-based discounts, explain how to select **Amt** mode on transaction lines, and provide the exact steps and prerequisites.
+
 - LIVE DATABASE ITEM DIAGNOSTICS & TROUBLESHOOTING:
   * When "LIVE DATABASE RECORD DIAGNOSTICS" are present in the prompt:
     1. Always report the actual, verified database facts first for the specific item (exact Item Name, SKU, Status, whether `Is Returnable` is enabled or disabled, available stock quantity, and whether completed sales dispatches exist).

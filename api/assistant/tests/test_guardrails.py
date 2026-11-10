@@ -52,6 +52,9 @@ class GuardrailsTestCase(SimpleTestCase):
             "how do i delete a supplier in the system",
             "where can i update the price of an item",
             "how to delete an invoice",
+            "shall we add the discount on the amount as well",
+            "can we add discount on the amount",
+            "is it possible to add discount",
         ]
         for q in workflow_queries:
             with self.subTest(query=q):
