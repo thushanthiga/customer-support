@@ -483,6 +483,11 @@ def classify_query(question: str, history: tuple = ()) -> dict:
         r"\b(?:why (?:is this|are these|are items) (?:in demand|considered demand|demand|below minimum))\b",
         r"\b(?:what (?:tables?|query|basis|logic) (?:did you|do you) (?:use|check|run|query))\b",
         r"\b(?:con{1,2}ected database|within your scope|database scope|only within your scope|scope to get)\b",
+        r"\b(?:why (?:are you|did you|is it|was it)\s+(?:giving|give|showing|show|returning|return|listing|list|including|include|fetching|fetch))\b",
+        r"\b(?:why (?:are you|did you)\s+(?:give|show|return|list|include)\s+(?:me\s+)?(?:the\s+)?(?:above\s+)?(?:list|results?|records?|rows?|count|\d+))\b",
+        r"\b(?:why\s+(?:did\s+i\s+get|am\s+i\s+getting|is\s+there)\s+(?:the\s+)?(?:above\s+)?(?:list|\d+|results?|records?|rows?))\b",
+        r"\b(?:why\s+were\s+(?:those|these|the\s+above)\s+(?:records?|orders?|items?|results?|rows?)\s+(?:shown|returned|included|given))\b",
+        r"\b(?:why (?:was|were) (?:there|they)\s+\d+\s+(?:records?|orders?|items?|results?|rows?|matching))\b",
     )
     if any(re.search(pat, q_lower) for pat in explanation_patterns):
         res = {"classification": "database_explanation", "reason": "Query asks how records, demand, or metrics are determined from the connected database."}
@@ -536,7 +541,7 @@ def classify_query(question: str, history: tuple = ()) -> dict:
             "Apptimate One is an enterprise ERP system spanning multiple business verticals and modules: Sales & Invoicing, Procurement & Purchasing, Inventory & Warehousing, Construction & Project Management (BOQ, Rate Cards, Variations/Change Orders, Fuel Logs, Subcontractors, IPCs), Manufacturing & BOMs, Jewelry, POS, Finance & Accounting, and HR & Payroll.\n\n"
             "Classify the user inquiry into exactly one category:\n"
             "- 'database': Asking to retrieve, filter, count, calculate, or inspect live records/data in the ERP database (items, stock, transactions, orders, invoices, suppliers, customers, prices, balances). IMPORTANT: Statements where the user mentions having added, created, or entered a transaction or record in the ERP (e.g. 'I have added a sales for 10000', 'nope I have added a sales for 10000', 'I created an invoice for 5000', 'is there any sales worth of 100000') MUST ALWAYS be classified as 'database' so the system verifies whether the record exists in the database. NEVER classify statements about business data or transaction additions as 'general' or 'out_of_scope'!\n"
-            "- 'database_explanation': Asking how the assistant found, calculated, or determined a database metric, demand, or query result, what tables/logic were used, or asking about the connected database scope.\n"
+            "- 'database_explanation': Asking how the assistant found, calculated, or determined a database metric, demand, or query result, why certain records/results/numbers were shown or returned, what tables/logic were used, or asking about the connected database scope (e.g. 'then why are you giving me the above 11 list when I asked for worth of 100000', 'why did you return 11 orders', 'how did you calculate this', 'what logic did you use').\n"
             "- 'document': Asking about software usage, UI navigation, feature explanation, business rules, setup, architecture, or documentation. (Includes questions about whether or how the system supports a feature or workflow, e.g. 'get me the whole flow of construction', 'how does manufacturing work', 'shall we add the discount on the amount', 'can we add a discount', 'how to update prices', 'where do we configure rules'). Any inquiry regarding an ERP module, system flow, architecture, or process walkthrough MUST ALWAYS be classified as 'document'.\n"
             "- 'hybrid': Needs both live record checks and documented troubleshooting or navigation.\n"
             "- 'general': Greetings or conversational acknowledgements.\n"
@@ -906,12 +911,18 @@ class LocalAnswer:
             self.database_explanation_reply(self.question, previous_plan)
             return self.payload()
 
-        if self.search_type == "document":
+        if self.search_type in ("document", "general"):
             q_lower = (self.question or "").lower()
-            if any(term in q_lower for term in ("connected database", "conected database", "within your scope", "within yopur scope", "how can you find this as demand", "how did you find this", "how do you find demand", "why is this in demand")):
-                logger.info("[ENGINE: ROUTE BRANCH] Redirecting database-scope question to database_explanation_reply")
+            if any(term in q_lower for term in (
+                "connected database", "conected database", "within your scope", "within yopur scope",
+                "how can you find this as demand", "how did you find this", "how do you find demand", "why is this in demand",
+                "why are you giving", "why did you give", "why are you showing", "why did you show", "why were they", "why was there",
+            )):
+                logger.info("[ENGINE: ROUTE BRANCH] Redirecting database-explanation question to database_explanation_reply")
                 self.database_explanation_reply(self.question, previous_plan)
                 return self.payload()
+
+        if self.search_type == "document":
             logger.info("[ENGINE: ROUTE BRANCH] Executing documentation_answer (RAG)")
             if not self.documentation_answer(self.question):
                 self.parts.append("I could not verify these steps in the system. Please specify the screen name or the exact action or error you are encountering so I can guide you.")
@@ -953,6 +964,11 @@ COMMUNICATION STYLE FOR NON-TECHNICAL CUSTOMERS:
   * Say 'configured minimum stock level in the Item Master' instead of 'min_stock_level' or 'inventory_item_replenishment_rules'.
   * Say 'repeat customer purchases and sales velocity' instead of 'sales_frequency'.
 - Confirm that calculations come strictly from verified live ERP records, never from hypothetical external estimates.
+- EXPLAINING QUERIES, FILTERS, OR PREVIOUS RESULTS:
+  * When the user asks why a previous query returned a specific number of records (e.g. 11 records), why certain orders/items were included, or why the previous list differed from their intended amount (e.g. 'then why are you giving me the above 11 list when I have asked for with of 100000'):
+    - Honestly explain the difference: clarify that the previous search used a threshold filter of 'greater than or equal to 100,000' (orders exceeding or equal to 100,000), which pulled all higher-value orders (e.g. 144,000, 432,000, 384,000), rather than filtering strictly for an exact match of 100,000.
+    - Clarify that when searching strictly for sales orders with an exact amount of 100,000, no such records exist in the database (0 matching records).
+    - Provide a polite, transparent explanation that directly addresses the user's question without technical jargon or excuses.
 - Keep the answer concise, actionable, and customer-friendly.
 """
         user_prompt = f"Question: {question}\n\n"

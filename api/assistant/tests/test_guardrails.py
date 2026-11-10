@@ -86,3 +86,16 @@ class GuardrailsTestCase(SimpleTestCase):
         cls = classify_query(q)
         self.assertEqual(cls["classification"], "document")
 
+    def test_database_explanation_why_queries_classified_as_database_explanation(self):
+        why_queries = [
+            "then why are you giving me the above 11 list when I have asked for with of 100000",
+            "why did you give me 11 results",
+            "why are you showing these records",
+            "why did you return that list",
+            "how do you find demand",
+        ]
+        for q in why_queries:
+            with self.subTest(query=q):
+                cls = classify_query(q)
+                self.assertEqual(cls["classification"], "database_explanation")
+
