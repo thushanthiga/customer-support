@@ -227,18 +227,36 @@ def evaluate_query(plan, raw_schema, review=None, retry_count=0, history=None):
             for ref, actual in c_refs.items():
                 if actual not in tables:
                     bad.append(f"table {actual} in CTE {cname}")
-            for f in _fields(cdata["cte"].get("select")) + _fields(cdata["cte"].get("filters")) + _fields(cdata["cte"].get("group_by")):
+            cte_calc_aliases = {
+                s.get("alias")
+                for s in (cdata["cte"].get("select") or [])
+                if isinstance(s, dict) and s.get("alias") and (s.get("expression") or s.get("case_when") or s.get("aggregate") or s.get("window"))
+            }
+            for f in _fields(cdata["cte"].get("select")) + _fields(cdata["cte"].get("group_by")):
                 actual = c_refs.get(f["table"], f["table"])
                 if f["column"] not in tables.get(actual, {}):
                     bad.append(f"{actual}.{f['column']} in CTE {cname}")
+            for f in _fields(cdata["cte"].get("filters")):
+                actual = c_refs.get(f["table"], f["table"])
+                if f["column"] not in tables.get(actual, {}) and f["column"] not in cte_calc_aliases:
+                    bad.append(f"{actual}.{f['column']} in CTE {cname}")
 
         # Check outer query schema existence
+        outer_calc_aliases = {
+            s.get("alias")
+            for s in (plan.get("select") or [])
+            if isinstance(s, dict) and s.get("alias") and (s.get("expression") or s.get("case_when") or s.get("aggregate") or s.get("window"))
+        }
         for ref, actual in refs.items():
             if actual not in all_tables:
                 bad.append(f"table {actual}")
-        for f in _fields(plan.get("select")) + _fields(plan.get("filters")) + _fields(plan.get("group_by")):
+        for f in _fields(plan.get("select")) + _fields(plan.get("group_by")):
             actual = refs.get(f["table"], f["table"])
             if f["column"] not in all_tables.get(actual, {}):
+                bad.append(f"{actual}.{f['column']}")
+        for f in _fields(plan.get("filters")):
+            actual = refs.get(f["table"], f["table"])
+            if f["column"] not in all_tables.get(actual, {}) and f["column"] not in outer_calc_aliases:
                 bad.append(f"{actual}.{f['column']}")
         add("Schema existence", 0 if bad else 25, 25,
             "All tables/columns exist in tenant catalog." if not bad else "Missing: " + ", ".join(sorted(set(bad))))

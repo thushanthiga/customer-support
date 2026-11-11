@@ -403,6 +403,55 @@ class PlanningValidationError(ValueError):
         self.review = review
 
 
+_SQL_AGG_COL_RE = re.compile(
+    r"^\s*(SUM|COUNT|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?(\*|1|[a-zA-Z0-9_.]+)\s*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _unwrap_sql_col_syntax(item: dict, is_select: bool = False) -> None:
+    """Unwrap SQL aggregate or table.column strings placed inside a `column` field."""
+    if not isinstance(item, dict):
+        return
+    col_val = item.get("column")
+    if not isinstance(col_val, str):
+        return
+    col_str = col_val.strip()
+    m = _SQL_AGG_COL_RE.match(col_str)
+    if m:
+        agg_fn = m.group(1).upper()
+        is_distinct = bool(m.group(2))
+        inner_col = m.group(3).strip()
+        if inner_col in ("*", "1"):
+            inner_col = "id"
+        if "." in inner_col:
+            t_part, c_part = inner_col.split(".", 1)
+            if not item.get("table") and t_part:
+                item["table"] = t_part
+            inner_col = "id" if c_part in ("*", "1") else c_part
+        item["column"] = inner_col
+        if is_select:
+            if not item.get("aggregate"):
+                item["aggregate"] = agg_fn
+            if is_distinct:
+                item["distinct"] = True
+            if not item.get("alias"):
+                item["alias"] = "total_count" if (agg_fn == "COUNT" and inner_col == "id") else f"{agg_fn.lower()}_{inner_col}"
+        return
+    if col_str in ("*", "1"):
+        item["column"] = "id"
+        if is_select and not item.get("aggregate"):
+            item["aggregate"] = "COUNT"
+            if not item.get("alias"):
+                item["alias"] = "total_count"
+        return
+    if "." in col_str and "(" not in col_str:
+        t_part, c_part = col_str.split(".", 1)
+        if not item.get("table") and t_part:
+            item["table"] = t_part
+        item["column"] = "id" if c_part in ("*", "1") else c_part
+
+
 def _normalize_expr_enums(expr, base_table=None):
     if not isinstance(expr, dict):
         return
@@ -465,6 +514,7 @@ def _normalize_expr_enums(expr, base_table=None):
                         val.pop(k, None)
                 _normalize_expr_enums(val["expression"], base_table)
             else:
+                _unwrap_sql_col_syntax(val, is_select=False)
                 if base_table and val.get("column") and not val.get("table") and not val.get("alias"):
                     val["table"] = base_table
                 if {"table", "column"} <= set(val) and not ({"operator", "left", "right"} <= set(val)):
@@ -519,9 +569,11 @@ def _normalize_block_enums(block):
                     j.pop(k, None)
             if isinstance(j.get("type"), str):
                 j["type"] = j["type"].upper()
-    for idx, sel in enumerate((block.get("select") or []) + (block.get("group_by") or []), 1):
+    select_list = block.get("select") or []
+    for idx, sel in enumerate(select_list + (block.get("group_by") or []), 1):
         if not isinstance(sel, dict):
             continue
+        is_sel_item = any(sel is s for s in select_list)
         if {"operator", "left", "right"} <= set(sel) and "expression" not in sel:
             sel["expression"] = {
                 "operator": sel.pop("operator"),
@@ -532,6 +584,7 @@ def _normalize_block_enums(block):
         for k in list(sel.keys()):
             if k not in allowed_sel_keys:
                 sel.pop(k, None)
+        _unwrap_sql_col_syntax(sel, is_select=is_sel_item)
         expr = sel.get("expression")
         if isinstance(expr, dict):
             raw_op = str(expr.get("operator") or expr.get("function") or "").upper()
@@ -576,6 +629,7 @@ def _normalize_block_enums(block):
                     sel["distinct"] = True
                 if sel.get("table") or sel.get("column"):
                     sel.pop("expression", None)
+        _unwrap_sql_col_syntax(sel, is_select=is_sel_item)
         if isinstance(sel.get("aggregate"), str):
             sel["aggregate"] = sel["aggregate"].upper()
         if isinstance(sel.get("date_part"), str):
@@ -674,18 +728,6 @@ def _normalize_block_enums(block):
     for flt in raw_filters:
         if not isinstance(flt, dict):
             continue
-        flt_alias = flt.get("alias") or flt.get("column")
-        # If an aggregate or window alias was placed into filters, move it to having
-        if flt_alias and flt_alias in selected_aliases:
-            target_sel = selected_aliases[flt_alias]
-            if target_sel.get("aggregate") or target_sel.get("window"):
-                flt_copy = dict(flt)
-                flt_copy["alias"] = flt_alias
-                flt_copy.pop("table", None)
-                flt_copy.pop("column", None)
-                block.setdefault("having", []).append(flt_copy)
-                continue
-
         _lift_comparison_expr(flt, is_having=False)
 
         # If model gave left/right directly on filter
@@ -716,7 +758,55 @@ def _normalize_block_enums(block):
                 flt.pop("expression", None)
             else:
                 flt.pop("expression", None)
-        if flt.get("column") and not flt.get("table") and not flt.get("expression") and base_t:
+
+        # Check if filter column is an SQL aggregate like SUM(volume) or COUNT(*)
+        if isinstance(flt.get("column"), str) and _SQL_AGG_COL_RE.match(flt["column"].strip()):
+            temp_agg = {"table": flt.get("table") or base_t, "column": flt["column"]}
+            _unwrap_sql_col_syntax(temp_agg, is_select=True)
+            matched_alias = None
+            for s in block.get("select") or []:
+                if isinstance(s, dict) and s.get("aggregate") == temp_agg.get("aggregate") and s.get("column") == temp_agg.get("column"):
+                    if not s.get("alias"):
+                        s["alias"] = temp_agg["alias"]
+                    matched_alias = s["alias"]
+                    break
+            if not matched_alias:
+                matched_alias = temp_agg["alias"]
+                block.setdefault("select", []).append(temp_agg)
+                selected_aliases[matched_alias] = temp_agg
+            flt_copy = {
+                "alias": matched_alias,
+                "operator": (flt.get("operator") or "=").upper(),
+                "value": flt.get("value"),
+            }
+            block.setdefault("having", []).append(flt_copy)
+            continue
+
+        _unwrap_sql_col_syntax(flt, is_select=False)
+
+        flt_alias = flt.get("alias") or flt.get("column")
+        # If an alias in `select` was referenced in `filters`
+        if flt_alias and flt_alias in selected_aliases and not flt.get("expression"):
+            target_sel = selected_aliases[flt_alias]
+            if target_sel.get("aggregate") or target_sel.get("window"):
+                flt_copy = dict(flt)
+                flt_copy["alias"] = flt_alias
+                flt_copy.pop("table", None)
+                flt_copy.pop("column", None)
+                flt_copy.pop("expression", None)
+                block.setdefault("having", []).append(flt_copy)
+                continue
+            elif target_sel.get("expression") or target_sel.get("case_when") or (flt.get("alias") and not flt.get("column")):
+                flt["alias"] = flt_alias
+                flt.pop("table", None)
+                flt.pop("column", None)
+                flt.pop("expression", None)
+
+        if flt.get("alias") and flt.get("alias") not in selected_aliases and not flt.get("column") and not flt.get("expression"):
+            flt["column"] = flt.pop("alias")
+            _unwrap_sql_col_syntax(flt, is_select=False)
+
+        if flt.get("column") and not flt.get("table") and not flt.get("expression") and not flt.get("alias") and base_t:
             flt["table"] = base_t
         if isinstance(flt.get("operator"), str):
             flt["operator"] = flt["operator"].upper()
@@ -745,6 +835,15 @@ def _normalize_block_enums(block):
         # having_item schema strictly allows: alias, expression, operator, value
         if not h.get("alias") and h.get("column"):
             col_name = h.pop("column")
+            if isinstance(col_name, str) and _SQL_AGG_COL_RE.match(col_name.strip()):
+                temp_agg = {"table": h.get("table") or base_t, "column": col_name}
+                _unwrap_sql_col_syntax(temp_agg, is_select=True)
+                matched_agg = [
+                    s.get("alias")
+                    for s in (block.get("select") or [])
+                    if isinstance(s, dict) and s.get("aggregate") == temp_agg.get("aggregate") and s.get("column") == temp_agg.get("column") and s.get("alias")
+                ]
+                col_name = matched_agg[0] if matched_agg else temp_agg["alias"]
             if col_name in selected_aliases:
                 h["alias"] = col_name
             else:

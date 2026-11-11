@@ -5,6 +5,7 @@ and false retrieval by establishing deterministic mappings between ERP business 
 and physical MySQL schema structures.
 """
 import copy
+import json
 import re
 from typing import Dict, List, Set, Tuple, Any
 
@@ -70,6 +71,10 @@ CORE_APPLICATION_RELATIONSHIPS = [
     {"source": "core_erp", "left_table": "construction_change_orders", "left_column": "project_id", "right_table": "construction_projects", "right_column": "id"},
     {"source": "core_erp", "left_table": "construction_project_teams", "left_column": "project_id", "right_table": "construction_projects", "right_column": "id"},
     {"source": "core_erp", "left_table": "construction_project_teams", "left_column": "user_id", "right_table": "core_users", "right_column": "id"},
+    {"source": "core_erp", "left_table": "sales_price_rules", "left_column": "price_list_id", "right_table": "sales_price_lists", "right_column": "id"},
+    {"source": "core_erp", "left_table": "sales_price_rules", "left_column": "item_id", "right_table": "inventory_items", "right_column": "id"},
+    {"source": "core_erp", "left_table": "sales_price_rules", "left_column": "variant_id", "right_table": "inventory_item_variants", "right_column": "id"},
+    {"source": "core_erp", "left_table": "sales_price_rules", "left_column": "batch_id", "right_table": "inventory_batches", "right_column": "id"},
 ]
 
 # 2. COLUMN SYNONYM & HALLUCINATION REPAIR MAP
@@ -136,6 +141,34 @@ COLUMN_SYNONYMS = {
         "on_hand_stock": "qty_on_hand",
         "on_hand_quantity": "qty_on_hand",
     },
+    "sales_price_rules": {
+        "discount": "markdown_percentage",
+        "discount_percent": "markdown_percentage",
+        "discount_percentage": "markdown_percentage",
+        "discount_rate": "markdown_percentage",
+        "markdown": "markdown_percentage",
+        "price": "rate",
+    },
+    "sales_order_lines": {
+        "discount": "unit_discount",
+        "discount_amount": "unit_discount",
+        "price": "unit_price",
+    },
+    "sales_quotation_lines": {
+        "discount": "unit_discount",
+        "discount_amount": "unit_discount",
+        "price": "unit_price",
+    },
+    "sales_goods_issue_note_lines": {
+        "discount": "unit_discount",
+        "discount_amount": "unit_discount",
+        "price": "unit_price",
+    },
+    "procurement_goods_receipt_note_lines": {
+        "discount": "discount_percent",
+        "discount_percentage": "discount_percent",
+        "price": "unit_price",
+    },
 }
 
 # 3. SEMANTIC BUSINESS CONCEPT DEFINITIONS FOR PROMPT INJECTION
@@ -169,11 +202,13 @@ SEMANTIC_CONCEPT_GUIDE = """AUTHORITATIVE ERP BUSINESS ENTITY & SCHEMA CONCEPTS:
     - Order by `order_frequency DESC, total_quantity_ordered DESC`.
   * Do NOT rank one-off purchases (where sales_frequency = 1) as items in demand. Repeat customer purchases (HAVING sales_frequency > 1) and high sales velocity represent true customer demand. Never use HAVING sales_frequency > 1 OR total_units_sold > 1.
 - Physical Stock & Inventory Balances:
-  * Table: `inventory_stock_balances` (`qty_available`, `qty_on_hand`) joined to `inventory_items` and `core_warehouses`.
-- Minimum Stock & Replenishment:
+  * Table: `inventory_stock_balances` (`qty_available`, `qty_on_hand`, `qty_allocated`) joined to `inventory_items` (`name AS item_name`, `sku AS sku`) and optionally `inventory_item_variants` (`variant_name AS variant_name`) and `core_warehouses`.
+  * CRITICAL: Whenever querying `inventory_stock_balances`, `sales_price_rules`, `inventory_item_replenishment_rules`, or `inventory_batches`, ALWAYS join `inventory_items` on `item_id = inventory_items.id` and include `inventory_items.name AS item_name` and `inventory_items.sku AS sku` in `select` so the output table shows human-readable product names and SKUs instead of raw numeric `item_id`s!
+- Minimum Stock, Maximum Stock (Overstock) & Replenishment:
   * Configured on the Item Master: `Sidebar ➔ Inventory ➔ Catalog ➔ Items` (`min_stock_level`, `max_stock_level`, `reorder_point` in `inventory_item_replenishment_rules`).
-  * Monitored on: `Sidebar ➔ Inventory ➔ Stock Management ➔ Stock Overview` (alerts for Critical `< min_stock_level` and Out of Stock `<= 0`).
+  * Monitored on: `Sidebar ➔ Inventory ➔ Stock Management ➔ Stock Overview` (alerts for Critical `< min_stock_level`, Out of Stock `<= 0`, and Overstock `> max_stock_level`).
   * When comparing item stock < minimum (`min_stock_level`), use `inventory_items` joined with `INNER JOIN inventory_item_replenishment_rules` (`min_stock_level > 0`) and `LEFT JOIN inventory_stock_balances`, selecting `COALESCE(SUM(inventory_stock_balances.qty_available), 0) AS stock_quantity` and filtering `HAVING stock_quantity < min_stock_level`.
+  * Overstocks / Overstocked Items / Excess Stock: When the user asks for overstocks, overstocked items, or items above maximum stock level (e.g., "show overstocks", "which items are overstocked", "I have asked for the overstocks no"), query `inventory_items` joined with `INNER JOIN inventory_item_replenishment_rules` (`max_stock_level > 0`, `variant_id IS NULL`, `warehouse_id IS NULL`) and `LEFT JOIN inventory_stock_balances`, selecting `inventory_items.id AS item_id`, `inventory_items.name AS item_name`, `inventory_items.sku AS sku`, `COALESCE(SUM(inventory_stock_balances.qty_on_hand), 0) AS stock_quantity`, and `inventory_item_replenishment_rules.max_stock_level AS max_stock_level`, grouped by item and `max_stock_level`, with `HAVING stock_quantity > max_stock_level` (or rank `inventory_stock_balances` joined to `inventory_items` by `qty_on_hand DESC` where `qty_on_hand > 0`).
 - Unsold Catalog Items:
   * Base table `inventory_items` LEFT JOIN `sales_order_lines` ON `sales_order_lines.item_id = inventory_items.id` WHERE `sales_order_lines.id IS NULL` and `inventory_items.status = 'active'`.
 - Unwanted Stock, Obsolete Stock & Dead Stock:
@@ -182,16 +217,42 @@ SEMANTIC_CONCEPT_GUIDE = """AUTHORITATIVE ERP BUSINESS ENTITY & SCHEMA CONCEPTS:
   * Can optionally LEFT JOIN `inventory_stock_balances` on `item_id = inventory_items.id` to show warehouse stock levels.
   * Select `id AS item_id`, `sku AS item_sku`, `name AS item_name`, `status AS item_status`.
   * Never block or reject unwanted stock queries for clarification on time frames or duration.
+- Item Pricing, Variant Discounts & Price Rules:
+  * Catalog Item Variant Pricing (`inventory_item_variants` joined to `inventory_items` on `inventory_item_variants.item_id = inventory_items.id`):
+    - Physical pricing columns on `inventory_item_variants`: `sale_price`, `cost_price`, `min_sales_price`, `sku`, `variant_name`, `item_id`, `status`, `deleted_at`.
+    - CRITICAL: Neither `inventory_item_variants` nor `inventory_items` has a physical `discount` column! Never reference `inventory_item_variants.discount` or `inventory_items.discount`.
+    - Standard Item Discount Calculation (verified catalog calculation when `cost_price` and `sale_price` are compared):
+      * Percentage scale (`0` to `100`, e.g., `18` for `18%`, `30` for `30%`):
+        `(((inventory_item_variants.cost_price - inventory_item_variants.sale_price) / inventory_item_variants.cost_price) * 100) AS discount_percentage`
+      * Decimal rate scale (`0.0` to `1.0`, e.g., `0.18` for `18%`, `0.30` for `30%`):
+        `((inventory_item_variants.cost_price - inventory_item_variants.sale_price) / inventory_item_variants.cost_price) AS discount_rate`
+      * Filter `inventory_item_variants.deleted_at IS NULL`, `inventory_item_variants.cost_price > 0`, `inventory_item_variants.sale_price > 0`, and `inventory_item_variants.sale_price < inventory_item_variants.cost_price` (so only genuinely discounted items with positive prices are included), and filter on the calculated alias using `{"alias": "discount_percentage", "operator": "<", "value": 18}` (without `"table"` or `"column"`). Match the threshold scale (`18` vs `0.18`) to whether `* 100` is in the expression!
+  * Price List Rules (`sales_price_rules` joined to `sales_price_lists` and `inventory_items`):
+    - Physical columns: `markdown_percentage`, `rate`, `min_quantity`, `item_id`, `variant_id`, `price_list_id`.
+  * Sales Line Discounts (`sales_order_lines`, `sales_quotation_lines`, `sales_goods_issue_note_lines`):
+    - Physical columns: `unit_price`, `unit_discount` (NO `discount` column).
+- Construction Fuel Logs & Machinery:
+  * Table `construction_fuel_logs`: tracks fuel usage with `volume` (decimal fuel quantity), `rate`, `log_date`, `project_id`, `machinery_id`, `fuel_station_party_id`.
+  * For total fuel logged: `SUM(construction_fuel_logs.volume) AS total_fuel_volume` and `COUNT(construction_fuel_logs.id) AS total_logs`. Always use `"column": "volume", "aggregate": "SUM"` (never put `"SUM(volume)"` or `"COUNT(*)"` inside `"column"`).
 """
 
 # 4. CONCEPT EXPANSION KEYWORDS FOR SMART TABLE RETRIEVAL
 CONCEPT_KEYWORD_EXPANSIONS = {
-    # Profit, Margins, Cost & Pricing
-    "profit": ["sales", "orders", "lines", "items", "unit_price", "invoices"],
-    "margin": ["sales", "orders", "lines", "items", "unit_price", "invoices"],
-    "markup": ["sales", "orders", "lines", "items", "unit_price"],
-    "cost": ["sales", "order", "lines", "items", "purchase", "orders"],
-    "price": ["items", "sales", "order", "lines", "price", "lists"],
+    # Profit, Margins, Cost, Pricing & Discounts
+    "profit": ["sales", "orders", "lines", "items", "unit_price", "invoices", "variants", "cost_price", "sale_price"],
+    "margin": ["sales", "orders", "lines", "items", "unit_price", "invoices", "variants", "cost_price", "sale_price"],
+    "markup": ["sales", "orders", "lines", "items", "unit_price", "variants", "cost_price", "sale_price"],
+    "cost": ["sales", "order", "lines", "items", "purchase", "orders", "variants", "cost_price"],
+    "price": ["items", "variants", "sales", "order", "lines", "price", "lists", "rules", "sale_price", "cost_price"],
+    "discount": ["variants", "items", "sale_price", "cost_price", "price", "rules", "lists", "markdown_percentage", "unit_discount"],
+    "discounted": ["variants", "items", "sale_price", "cost_price", "price", "rules", "lists", "markdown_percentage", "unit_discount"],
+    "discpunted": ["variants", "items", "sale_price", "cost_price", "price", "rules", "lists", "markdown_percentage", "unit_discount"],
+    "discounts": ["variants", "items", "sale_price", "cost_price", "price", "rules", "lists", "markdown_percentage", "unit_discount"],
+    "markdown": ["price", "rules", "lists", "markdown_percentage", "variants", "items"],
+    "percentage": ["variants", "items", "sale_price", "cost_price", "price", "rules", "markdown_percentage"],
+    "percent": ["variants", "items", "sale_price", "cost_price", "price", "rules", "markdown_percentage"],
+    "fuel": ["construction", "fuel", "logs", "volume", "machinery", "projects"],
+    "machinery": ["construction", "machinery", "fuel", "logs", "projects"],
     # Demand, Popularity & Velocity
     "demand": ["sales", "goods", "issue", "dispatch", "orders", "lines", "items", "quantity"],
     "demanded": ["sales", "goods", "issue", "dispatch", "orders", "lines", "items", "quantity"],
@@ -216,11 +277,20 @@ CONCEPT_KEYWORD_EXPANSIONS = {
     "immedielty": ["balances", "items", "replenishment", "rules", "stock", "sales"],
     "immediately": ["balances", "items", "replenishment", "rules", "stock", "sales"],
     "things": ["items", "balances", "sales"],
-    # Unwanted, Obsolete & Dead Stock
+    # Unwanted, Obsolete, Dead & Overstock / Reserved Stock
     "unwanted": ["items", "status", "balances", "stock", "warehouses"],
     "stokes": ["items", "balances", "stock", "warehouses"],
     "obsolete": ["items", "status", "balances", "stock", "warehouses"],
     "dead": ["items", "status", "balances", "stock", "warehouses"],
+    "overstock": ["balances", "items", "replenishment", "rules", "stock", "max_stock_level", "qty_on_hand"],
+    "overstocks": ["balances", "items", "replenishment", "rules", "stock", "max_stock_level", "qty_on_hand"],
+    "overstocked": ["balances", "items", "replenishment", "rules", "stock", "max_stock_level", "qty_on_hand"],
+    "understock": ["balances", "items", "replenishment", "rules", "stock", "min_stock_level", "reorder_point"],
+    "understocks": ["balances", "items", "replenishment", "rules", "stock", "min_stock_level", "reorder_point"],
+    "understocked": ["balances", "items", "replenishment", "rules", "stock", "min_stock_level", "reorder_point"],
+    "excess": ["balances", "items", "replenishment", "rules", "stock", "max_stock_level", "qty_on_hand"],
+    "reserved": ["balances", "items", "variants", "qty_allocated", "qty_on_hand", "qty_available"],
+    "allocated": ["balances", "items", "variants", "qty_allocated", "qty_on_hand", "qty_available"],
     # Payments & Settlements
     "payment": ["invoices", "payments", "settled", "amount", "party"],
     "payments": ["invoices", "payments", "settled", "amount", "party"],
@@ -1015,6 +1085,361 @@ def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
             sel["distinct"] = True
         elif sel.get("aggregate") == "COUNT" and sel.get("table") in {"sales_goods_issue_notes", "sales_orders", "procurement_purchase_orders", "procurement_goods_receipt_notes"}:
             sel["distinct"] = True
+
+    # 5.2 Heal SQL aggregate strings in `column` (e.g., SUM(volume), COUNT(*)) and item discount calculations
+    _agg_col_re = re.compile(
+        r"^\s*(SUM|COUNT|AVG|MIN|MAX)\s*\(\s*(DISTINCT\s+)?(\*|1|[a-zA-Z0-9_.]+)\s*\)\s*$",
+        re.IGNORECASE,
+    )
+    for sel in repaired.get("select", []):
+        if not isinstance(sel, dict) or not isinstance(sel.get("column"), str):
+            continue
+        m_agg = _agg_col_re.match(sel["column"].strip())
+        if m_agg:
+            agg_fn = m_agg.group(1).upper()
+            is_dist = bool(m_agg.group(2))
+            inner_c = m_agg.group(3).strip()
+            if inner_c in ("*", "1"):
+                inner_c = "id"
+            if "." in inner_c:
+                tp, cp = inner_c.split(".", 1)
+                sel["table"] = sel.get("table") or tp
+                inner_c = "id" if cp in ("*", "1") else cp
+            sel["column"] = inner_c
+            if not sel.get("aggregate"):
+                sel["aggregate"] = agg_fn
+            if is_dist:
+                sel["distinct"] = True
+            if not sel.get("alias"):
+                sel["alias"] = "total_count" if (agg_fn == "COUNT" and inner_c == "id") else f"{agg_fn.lower()}_{inner_c}"
+
+    # Heal non-existent discount columns on inventory_item_variants / inventory_items into the verified cost_price vs sale_price calculation
+    discount_col_names = {"discount", "discount_rate", "discount_percent", "discount_percentage"}
+    all_plan_tables = {repaired.get("base_table")} | {j.get("table") for j in (repaired.get("joins") or []) if isinstance(j, dict)}
+    if all_plan_tables & {"inventory_item_variants", "inventory_items"}:
+        existing_disc_sel = None
+        needs_disc_heal = False
+        for sel in repaired.get("select", []):
+            if not isinstance(sel, dict):
+                continue
+            if sel.get("expression") and (
+                sel.get("alias") in discount_col_names
+                or ("cost_price" in json.dumps(sel["expression"]) and "sale_price" in json.dumps(sel["expression"]))
+            ):
+                existing_disc_sel = sel
+            elif (
+                sel.get("table") in {"inventory_item_variants", "inventory_items", None}
+                and sel.get("column") in discount_col_names
+                and not sel.get("expression")
+            ):
+                needs_disc_heal = True
+
+        for f in (repaired.get("filters") or []) + (repaired.get("having") or []):
+            if isinstance(f, dict) and f.get("column") in discount_col_names and f.get("table") in {"inventory_item_variants", "inventory_items", None}:
+                if not existing_disc_sel or f.get("column") != existing_disc_sel.get("alias"):
+                    needs_disc_heal = True
+
+        if needs_disc_heal:
+            if repaired.get("base_table") == "inventory_items" and "inventory_item_variants" not in all_plan_tables:
+                repaired.setdefault("joins", []).append({
+                    "type": "INNER",
+                    "table": "inventory_item_variants",
+                    "left_table": "inventory_items",
+                    "left_column": "id",
+                    "right_column": "item_id",
+                })
+                all_plan_tables.add("inventory_item_variants")
+
+            # Determine threshold scale from filters/having
+            thresh_vals = [
+                f.get("value")
+                for f in (repaired.get("filters") or []) + (repaired.get("having") or [])
+                if isinstance(f, dict)
+                and (f.get("column") in discount_col_names or f.get("alias") in discount_col_names)
+                and isinstance(f.get("value"), (int, float))
+            ]
+            use_ratio_scale = any(0 < abs(v) < 1 for v in thresh_vals)
+            ratio_expr = {
+                "operator": "/",
+                "left": {
+                    "operator": "-",
+                    "left": {"table": "inventory_item_variants", "column": "cost_price"},
+                    "right": {"table": "inventory_item_variants", "column": "sale_price"},
+                },
+                "right": {"table": "inventory_item_variants", "column": "cost_price"},
+            }
+            disc_expr = ratio_expr if use_ratio_scale else {"operator": "*", "left": ratio_expr, "right": 100}
+            disc_alias = "discount_rate" if use_ratio_scale else "discount_percentage"
+
+            if existing_disc_sel:
+                disc_alias = existing_disc_sel.get("alias") or disc_alias
+            else:
+                replaced_in_select = False
+                for sel in repaired.get("select", []):
+                    if (
+                        isinstance(sel, dict)
+                        and sel.get("table") in {"inventory_item_variants", "inventory_items", None}
+                        and sel.get("column") in discount_col_names
+                        and not sel.get("expression")
+                    ):
+                        disc_alias = sel.get("alias") or sel.get("column") or disc_alias
+                        sel.pop("table", None)
+                        sel.pop("column", None)
+                        sel["expression"] = copy.deepcopy(disc_expr)
+                        sel["alias"] = disc_alias
+                        existing_disc_sel = sel
+                        replaced_in_select = True
+                        break
+                if not replaced_in_select:
+                    existing_disc_sel = {"expression": copy.deepcopy(disc_expr), "alias": disc_alias}
+                    repaired.setdefault("select", []).append(existing_disc_sel)
+
+            for f in repaired.get("filters") or []:
+                if isinstance(f, dict) and f.get("column") in discount_col_names and f.get("table") in {"inventory_item_variants", "inventory_items", None}:
+                    f["alias"] = disc_alias
+                    f.pop("table", None)
+                    f.pop("column", None)
+                    f.pop("expression", None)
+
+        # Ensure valid positive pricing and genuine discount guard filters exist whenever discount is computed from cost_price vs sale_price
+        if existing_disc_sel and "inventory_item_variants" in all_plan_tables and not any(w in q_lower for w in ("negative", "invalid", "anomal")):
+            existing_flt_str = json.dumps(repaired.get("filters") or [])
+            if '"cost_price"' not in existing_flt_str:
+                repaired.setdefault("filters", []).append({
+                    "table": "inventory_item_variants",
+                    "column": "cost_price",
+                    "operator": ">",
+                    "value": 0,
+                })
+            if '"sale_price"' not in existing_flt_str:
+                repaired.setdefault("filters", []).append({
+                    "table": "inventory_item_variants",
+                    "column": "sale_price",
+                    "operator": ">",
+                    "value": 0,
+                })
+                repaired.setdefault("filters", []).append({
+                    "table": "inventory_item_variants",
+                    "column": "sale_price",
+                    "operator": "<",
+                    "value": {"table": "inventory_item_variants", "column": "cost_price"},
+                })
+
+        # Align scale between existing discount expression (0..1 vs 0..100) and filter/having threshold
+        if existing_disc_sel and isinstance(existing_disc_sel.get("expression"), dict):
+            expr_json = json.dumps(existing_disc_sel["expression"])
+            has_100_factor = "100" in expr_json
+            d_alias = existing_disc_sel.get("alias")
+            for clause in (repaired.get("filters") or []) + (repaired.get("having") or []):
+                if not isinstance(clause, dict):
+                    continue
+                c_ref = clause.get("alias") or clause.get("column")
+                val = clause.get("value")
+                if c_ref == d_alias and isinstance(val, (int, float)) and not isinstance(val, bool):
+                    if not has_100_factor and 1 < abs(val) <= 100:
+                        existing_disc_sel["expression"] = {
+                            "operator": "*",
+                            "left": existing_disc_sel["expression"],
+                            "right": 100,
+                        }
+                        has_100_factor = True
+                    elif has_100_factor and 0 < abs(val) < 1:
+                        clause["value"] = round(val * 100, 4)
+
+    # 5.3 Convert any filter referencing a calculated/aggregate select alias via table.column into an alias filter or HAVING
+    sel_alias_map = {
+        s.get("alias"): s
+        for s in (repaired.get("select") or [])
+        if isinstance(s, dict) and s.get("alias")
+    }
+    cleaned_where = []
+    for f in repaired.get("filters") or []:
+        if not isinstance(f, dict):
+            continue
+        f_col = f.get("column")
+        f_tbl = f.get("table")
+        is_phys_col = bool(f_tbl and f_col and f_col in schema.get("tables", {}).get(f_tbl, {}))
+        if f_col and not is_phys_col and f_col in sel_alias_map and not f.get("expression"):
+            t_sel = sel_alias_map[f_col]
+            if t_sel.get("aggregate") or t_sel.get("window"):
+                repaired.setdefault("having", []).append({
+                    "alias": f_col,
+                    "operator": (f.get("operator") or "=").upper(),
+                    "value": f.get("value"),
+                })
+                continue
+            else:
+                f["alias"] = f_col
+                f.pop("table", None)
+                f.pop("column", None)
+                f.pop("expression", None)
+        cleaned_where.append(f)
+    if "filters" in repaired:
+        repaired["filters"] = cleaned_where
+
+    # 5.4 Enrich item-ID-only detail queries with human-readable item_name, sku, and variant_name, and move ungrouped column HAVINGs to WHERE
+    has_any_agg = bool(repaired.get("group_by")) or any(
+        isinstance(s, dict) and (s.get("aggregate") or s.get("window"))
+        for s in (repaired.get("select") or [])
+    )
+    if not has_any_agg:
+        # Move any HAVING clause referencing a plain physical column alias into WHERE filters
+        if repaired.get("having"):
+            remaining_having = []
+            for h in repaired.get("having") or []:
+                if isinstance(h, dict) and h.get("alias") in sel_alias_map and not h.get("expression"):
+                    t_sel = sel_alias_map[h["alias"]]
+                    if t_sel.get("table") and t_sel.get("column") and not t_sel.get("expression") and not t_sel.get("case_when"):
+                        repaired.setdefault("filters", []).append({
+                            "table": t_sel["table"],
+                            "column": t_sel["column"],
+                            "operator": (h.get("operator") or "=").upper(),
+                            "value": h.get("value"),
+                        })
+                        continue
+                remaining_having.append(h)
+            repaired["having"] = remaining_having
+
+        item_detail_tables = {
+            "inventory_stock_balances",
+            "sales_price_rules",
+            "inventory_item_replenishment_rules",
+            "inventory_batches",
+            "inventory_serial_numbers",
+        }
+        if (
+            base_table in item_detail_tables
+            and "inventory_items" in tables
+            and "id" in tables["inventory_items"]
+            and "name" in tables["inventory_items"]
+            and "item_id" in tables.get(base_table, {})
+        ):
+            select_items = repaired.get("select") or []
+            has_item_id_sel = any(isinstance(s, dict) and s.get("column") == "item_id" for s in select_items)
+            has_item_name_sel = any(
+                isinstance(s, dict) and s.get("table") == "inventory_items" and s.get("column") in {"name", "sku"}
+                for s in select_items
+            )
+            if has_item_id_sel and not has_item_name_sel:
+                if "inventory_items" not in joined_tables:
+                    repaired.setdefault("joins", []).append({
+                        "type": "INNER",
+                        "table": "inventory_items",
+                        "left_table": base_table,
+                        "left_column": "item_id",
+                        "right_column": "id",
+                    })
+                    joined_tables.add("inventory_items")
+                    if "deleted_at" in tables["inventory_items"] and (repaired.get("filter_logic") or "AND").upper() == "AND":
+                        if not any(f.get("table") == "inventory_items" and f.get("column") == "deleted_at" for f in repaired.get("filters", [])):
+                            repaired.setdefault("filters", []).append({
+                                "table": "inventory_items",
+                                "column": "deleted_at",
+                                "operator": "IS NULL",
+                                "value": None,
+                            })
+                insert_pos = 0
+                for idx_s, s_item in enumerate(select_items):
+                    if isinstance(s_item, dict) and s_item.get("column") == "item_id":
+                        insert_pos = idx_s + 1
+                        break
+                select_items.insert(insert_pos, {"table": "inventory_items", "column": "name", "alias": "item_name"})
+                if "sku" in tables["inventory_items"]:
+                    select_items.insert(insert_pos + 1, {"table": "inventory_items", "column": "sku", "alias": "sku"})
+
+            has_variant_id_sel = any(isinstance(s, dict) and s.get("column") == "variant_id" for s in select_items)
+            has_variant_name_sel = any(
+                isinstance(s, dict) and s.get("table") == "inventory_item_variants" and s.get("column") == "variant_name"
+                for s in select_items
+            )
+            if (
+                has_variant_id_sel
+                and not has_variant_name_sel
+                and "inventory_item_variants" in tables
+                and "id" in tables["inventory_item_variants"]
+                and "variant_name" in tables["inventory_item_variants"]
+                and "variant_id" in tables.get(base_table, {})
+            ):
+                if "inventory_item_variants" not in joined_tables:
+                    repaired.setdefault("joins", []).append({
+                        "type": "LEFT",
+                        "table": "inventory_item_variants",
+                        "left_table": base_table,
+                        "left_column": "variant_id",
+                        "right_column": "id",
+                    })
+                    joined_tables.add("inventory_item_variants")
+                    if "deleted_at" in tables["inventory_item_variants"] and (repaired.get("filter_logic") or "AND").upper() == "AND":
+                        if not any(f.get("table") == "inventory_item_variants" and f.get("column") == "deleted_at" for f in repaired.get("filters", [])):
+                            repaired.setdefault("filters", []).append({
+                                "table": "inventory_item_variants",
+                                "column": "deleted_at",
+                                "operator": "IS NULL",
+                                "value": None,
+                            })
+                v_pos = len(select_items)
+                for idx_s, s_item in enumerate(select_items):
+                    if isinstance(s_item, dict) and s_item.get("column") == "variant_id":
+                        v_pos = idx_s + 1
+                        break
+                select_items.insert(v_pos, {"table": "inventory_item_variants", "column": "variant_name", "alias": "variant_name"})
+    else:
+        # Aggregated query grouped by item_id without item_name: enrich with inventory_items.name and sku
+        item_agg_tables = {
+            "inventory_stock_balances",
+            "sales_price_rules",
+            "inventory_item_replenishment_rules",
+            "sales_goods_issue_note_lines",
+            "sales_order_lines",
+        }
+        if (
+            base_table in item_agg_tables
+            and "inventory_items" in tables
+            and "id" in tables["inventory_items"]
+            and "name" in tables["inventory_items"]
+            and "item_id" in tables.get(base_table, {})
+        ):
+            select_items = repaired.get("select") or []
+            group_items = repaired.get("group_by") or []
+            has_item_id_grp = any(
+                isinstance(g, dict) and (
+                    (g.get("table") == base_table and g.get("column") == "item_id")
+                    or (g.get("table") == "inventory_items" and g.get("column") == "id")
+                )
+                for g in group_items
+            )
+            has_item_name_sel = any(
+                isinstance(s, dict) and s.get("table") == "inventory_items" and s.get("column") in {"name", "sku"}
+                for s in select_items
+            )
+            if has_item_id_grp and not has_item_name_sel:
+                if "inventory_items" not in joined_tables:
+                    repaired.setdefault("joins", []).append({
+                        "type": "INNER",
+                        "table": "inventory_items",
+                        "left_table": base_table,
+                        "left_column": "item_id",
+                        "right_column": "id",
+                    })
+                    joined_tables.add("inventory_items")
+                    if "deleted_at" in tables["inventory_items"] and (repaired.get("filter_logic") or "AND").upper() == "AND":
+                        if not any(f.get("table") == "inventory_items" and f.get("column") == "deleted_at" for f in repaired.get("filters", [])):
+                            repaired.setdefault("filters", []).append({
+                                "table": "inventory_items",
+                                "column": "deleted_at",
+                                "operator": "IS NULL",
+                                "value": None,
+                            })
+                insert_pos = 0
+                for idx_s, s_item in enumerate(select_items):
+                    if isinstance(s_item, dict) and s_item.get("column") in {"item_id", "id"}:
+                        insert_pos = idx_s + 1
+                        break
+                select_items.insert(insert_pos, {"table": "inventory_items", "column": "name", "alias": "item_name"})
+                group_items.append({"table": "inventory_items", "column": "name"})
+                if "sku" in tables["inventory_items"]:
+                    select_items.insert(insert_pos + 1, {"table": "inventory_items", "column": "sku", "alias": "sku"})
+                    group_items.append({"table": "inventory_items", "column": "sku"})
 
     # 6. ENSURE DESCRIPTIVE SELECT ALIASES (AVOID field_1 / field_3)
     used_aliases = {

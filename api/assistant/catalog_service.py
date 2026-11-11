@@ -74,6 +74,10 @@ def _parse_sections() -> Dict[str, str]:
             sections["hr"] = content
         elif "CRM" in header:
             sections["crm"] = content
+        elif "Construction" in header:
+            sections["construction"] = content
+        elif "Manufacturing" in header:
+            sections["manufacturing"] = content
         elif "Cross-Table Relationship Matrix" in header:
             sections["relationships"] = content
         elif "Canonical Analytical Recipes" in header:
@@ -92,6 +96,8 @@ def _parse_sections() -> Dict[str, str]:
                     sections["recipe_cte_balance_latest"] = rec_content
                 elif "Warehouse Stock vs Open" in rec_title:
                     sections["recipe_stock_vs_demand"] = rec_content
+                elif "Item Variant Discount" in rec_title or "Discount Percentage" in rec_title:
+                    sections["recipe_discount"] = rec_content
 
     _CACHED_SECTIONS = sections
     return _CACHED_SECTIONS
@@ -202,6 +208,22 @@ def get_catalog_slice(question: str) -> str:
     if _matches_any(q_lower, ["lead", "crm", "pipeline", "opportunity", "quotation"]):
         _add_module("crm")
         _add_module("sales")
+
+    # Discounts, Pricing & Variants
+    if _matches_any(q_lower, ["discount", "discounted", "discpunted", "markdown", "price", "variant", "sale_price", "cost_price"]):
+        _add_module("inventory")
+        _add_module("sales")
+        if _matches_any(q_lower, ["discount", "discounted", "discpunted", "markdown", "percentage", "percent"]):
+            if "recipe_discount" in sections:
+                selected.append(sections["recipe_discount"])
+
+    # Construction & Site Operations
+    if _matches_any(q_lower, ["construction", "fuel", "machinery", "boq", "ipc", "variation", "subcontractor", "site", "workforce"]):
+        _add_module("construction")
+
+    # Manufacturing & Production
+    if _matches_any(q_lower, ["manufacturing", "bom", "mrp", "work order", "production", "routing", "work_center"]):
+        _add_module("manufacturing")
 
     if len(selected) <= (1 if principles else 0):
         # Fallback for generic/open queries: include compact Inventory + Sales FKs

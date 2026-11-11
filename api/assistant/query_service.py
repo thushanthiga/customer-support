@@ -64,7 +64,23 @@ _NUMERIC_TYPES = {
 _AGGREGATES = {"COUNT", "SUM", "AVG", "MIN", "MAX"}
 _WINDOW_FUNCTIONS = {"ROW_NUMBER", "RANK", "DENSE_RANK", "SUM", "AVG", "MIN", "MAX", "COUNT", "LAG", "LEAD"}
 _OPERATORS = {"=", "!=", "<>", ">", ">=", "<", "<=", "LIKE", "IN", "NOT IN", "BETWEEN", "IS NULL", "IS NOT NULL"}
-_CROSS_ORG_MASTER_TABLES = {"core_parties", "core_users", "core_organizations", "core_currencies"}
+_CROSS_ORG_MASTER_TABLES = {
+    "core_parties",
+    "core_users",
+    "core_organizations",
+    "core_currencies",
+    "core_warehouses",
+    "inventory_items",
+    "inventory_item_variants",
+    "inventory_categories",
+    "inventory_brands",
+    "inventory_units_of_measure",
+    "inventory_item_replenishment_rules",
+    "inventory_batches",
+    "inventory_serial_numbers",
+    "sales_price_lists",
+    "sales_price_rules",
+}
 
 
 def _quote(identifier: str) -> str:
@@ -288,9 +304,12 @@ _PRIMARY_TABLE_BOOSTS = {
     "finance_invoices": 14,
     "core_parties": 14,
     "inventory_items": 14,
+    "inventory_item_variants": 12,
     "inventory_stock_balances": 12,
     "sales_orders": 12,
     "sales_order_lines": 12,
+    "sales_price_rules": 10,
+    "sales_price_lists": 10,
     "procurement_purchase_orders": 12,
     "procurement_purchase_order_lines": 12,
     "core_warehouses": 10,
@@ -304,6 +323,7 @@ _PRIMARY_TABLE_BOOSTS = {
     "fin_chart_of_accounts": 8,
     "fin_journal_entries": 8,
     "fin_journal_entry_lines": 8,
+    "construction_fuel_logs": 10,
 }
 
 _CORE_FK_MAP = {
@@ -402,12 +422,18 @@ def _relevant_tables(schema, question: str, limit: int = 20):
     if any(w in expanded for w in ["accounting", "account", "accounts", "journal", "gl", "ledger", "debit", "credit"]):
         expanded.update(["chart", "accounts", "journal", "entries", "lines", "fin"])
 
+    # Discounts, Pricing & Variants
+    if any(w in expanded for w in ["discount", "discounted", "discpunted", "discounts", "markdown", "percentage", "percent"]):
+        expanded.update(["variants", "items", "sale", "price", "cost", "rules", "lists", "markdown"])
+
     from .domain_schema import CONCEPT_KEYWORD_EXPANSIONS, SYSTEM_TABLE_PREFIXES
     for kw, terms in CONCEPT_KEYWORD_EXPANSIONS.items():
         if kw in expanded:
             expanded.update(terms)
 
     q_lower = (question or "").lower()
+    is_discount_query = any(k in q_lower for k in ("discount", "discounted", "discpunted", "markdown"))
+    is_fuel_query = "fuel" in q_lower
     scores = []
     for table, columns in schema["tables"].items():
         table_terms = variants(set(re.findall(r"[a-z0-9]+", table.lower())))
@@ -421,8 +447,20 @@ def _relevant_tables(schema, question: str, limit: int = 20):
         if table in _PRIMARY_TABLE_BOOSTS and (expanded & table_terms or any(c in expanded for c in columns)):
             score += _PRIMARY_TABLE_BOOSTS[table]
 
+        if is_discount_query and table in {"inventory_item_variants", "inventory_items", "sales_price_rules", "sales_price_lists", "sales_order_lines"}:
+            score += 18
+        if is_fuel_query and table in {"construction_fuel_logs", "construction_machinery", "construction_projects"}:
+            score += 24
+
         # Deprioritize unrelated specialist verticals unless specifically requested
-        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_", "manufacturing_")) and not any(k in q_lower for k in ("jewelry", "gold", "silver", "karigar", "money", "exchange", "currency", "construction", "boq", "mrp", "work order", "production order")):
+        if any(table.startswith(p) for p in ("jewelry_", "money_exchange_", "construction_", "manufacturing_")) and not any(
+            k in q_lower
+            for k in (
+                "jewelry", "gold", "silver", "karigar", "money", "exchange", "currency",
+                "construction", "boq", "fuel", "machinery", "ipc", "variation", "subcontractor", "site", "workforce", "rate card",
+                "manufacturing", "mrp", "bom", "phantom", "routing", "work_center", "work order", "production order",
+            )
+        ):
             score -= 12
         # Suppress internal template/system tables unless explicitly requested
         if any(table.startswith(p) for p in SYSTEM_TABLE_PREFIXES) and not any(k in q_lower for k in ("template", "printable", "print")):
@@ -775,6 +813,8 @@ def _compile_select_block(
         if (
             left_actual not in cte_catalog
             and table not in cte_catalog
+            and left_column != "id"
+            and right_column != "id"
             and left_actual not in _CROSS_ORG_MASTER_TABLES
             and table not in _CROSS_ORG_MASTER_TABLES
             and "organization_id" in tables.get(left_actual, {})
@@ -1369,6 +1409,86 @@ def _compile_select_block(
         "column_origins": column_origins,
         "cte_indexes": cte_indexes,
     }
+
+
+def validate_plan_compilation(query_plan: dict, physical_schema: dict) -> dict:
+    """Dry-run compile a structured query plan against physical_schema and verify SQL via SQLAlchemy."""
+    try:
+        if not isinstance(query_plan, dict):
+            raise ValueError("The query plan must be an object.")
+        if not isinstance(physical_schema, dict) or not physical_schema.get("tables"):
+            return {"valid": True, "sql": None, "params": {}, "error": None}
+        norm_plan = normalize_table_references(dict(query_plan))
+        working_schema = {
+            "tables": dict(physical_schema.get("tables", {})),
+            "relationships": set(physical_schema.get("relationships", ())),
+            "declared_relationships": set(physical_schema.get("declared_relationships", ())),
+            "application_relationships": set(physical_schema.get("application_relationships", ())),
+            "column_constraints": dict(physical_schema.get("column_constraints", {})),
+            "indexes": {k: dict(v) for k, v in physical_schema.get("indexes", {}).items()},
+        }
+        params = {}
+
+        def bind(value):
+            name = f"p{len(params)}"
+            params[name] = value
+            return f"%({name})s"
+
+        ctes = norm_plan.get("ctes") or []
+        if len(ctes) > _MAX_CTES:
+            raise ValueError(f"A query can define at most {_MAX_CTES} CTEs.")
+        cte_catalog = {}
+        cte_sql_parts = []
+        for cte_idx, cte in enumerate(ctes, start=1):
+            if not isinstance(cte, dict):
+                raise ValueError("Each CTE must be an object.")
+            cte_name = cte.get("name")
+            if not isinstance(cte_name, str) or not _IDENTIFIER_RE.fullmatch(cte_name):
+                raise ValueError(f"Invalid CTE name: {cte_name!r}.")
+            compiled_cte = _compile_select_block(
+                cte,
+                working_schema,
+                physical_schema,
+                cte_catalog,
+                bind,
+                alias_prefix=f"c{cte_idx}_",
+                is_cte=True,
+            )
+            cte_sql_parts.append(f"{_quote(cte_name)} AS ({compiled_cte['sql']})")
+            working_schema["tables"][cte_name] = dict(compiled_cte["output_types"])
+            if compiled_cte["cte_indexes"]:
+                working_schema["indexes"][cte_name] = dict(compiled_cte["cte_indexes"])
+            cte_catalog[cte_name] = {
+                "output_types": compiled_cte["output_types"],
+                "column_origins": compiled_cte["column_origins"],
+                "indexes": compiled_cte["cte_indexes"],
+            }
+
+        outer = _compile_select_block(
+            norm_plan,
+            working_schema,
+            physical_schema,
+            cte_catalog,
+            bind,
+            alias_prefix="",
+            is_cte=False,
+        )
+        sql = (
+            f"WITH {', '.join(cte_sql_parts)} {outer['sql']}"
+            if cte_sql_parts
+            else outer["sql"]
+        )
+        # Validate SQL bind structure via SQLAlchemy
+        from sqlalchemy import text as sa_text
+        sa_sql = re.sub(r"%\((p\d+)\)s", r":\1", sql)
+        sa_stmt = sa_text(sa_sql)
+        compiled_sa = sa_stmt.compile()
+        missing_binds = set(compiled_sa.params.keys()) - set(params.keys())
+        if missing_binds:
+            raise ValueError(f"Unbound SQL parameters detected: {', '.join(sorted(missing_binds))}")
+        return {"valid": True, "sql": sql, "params": params, "error": None}
+    except Exception as exc:
+        return {"valid": False, "sql": None, "params": {}, "error": str(exc)}
 
 
 def query_business_data(
