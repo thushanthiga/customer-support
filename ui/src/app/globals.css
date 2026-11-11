@@ -348,3 +348,46 @@ aside .session-list{min-height:0;overscroll-behavior:contain}
   color: #7b8e7e;
   margin-top: 4px;
 }
+
+:root {
+  --header-height: 79px;
+  --header-bg: rgb(252 253 251 / 0.94);
+  --header-bg-stuck: rgb(252 253 251 / 0.98);
+  --header-line-stuck: #dbe3d8;
+  --header-shadow-stuck: 0 4px 14px rgb(32 51 46 / 0.06);
+}
+
+html {
+  scroll-padding-top: var(--header-height);
+}
+
+.top-menubar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  width: 100%;
+  container-type: scroll-state;
+  container-name: top-menubar;
+}
+
+.top-menubar header {
+  height: var(--header-height);
+  background: var(--header-bg);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+@container top-menubar scroll-state(stuck: top) {
+  .top-menubar header {
+    background: var(--header-bg-stuck);
+    border-bottom-color: var(--header-line-stuck);
+    box-shadow: var(--header-shadow-stuck);
+  }
+}
+
+@media (max-width: 760px) {
+  :root {
+    --header-height: 65px;
+  }
+}

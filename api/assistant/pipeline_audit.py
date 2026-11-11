@@ -18,7 +18,7 @@ _INTENT_RULES = [
     ),
     (
         "product demand (sales frequency and units sold)",
-        r"\b(demand|demanded|hot|best[\s-]?sell\w*|top[\s-]?sell\w*|fast[\s-]?moving|popular|trending|season\w*|seson\w*)\b",
+        r"\b(demand|demanded|hot|best[\s-]?sell\w*|top[\s-]?sell\w*|most[\s-]?sell\w*|most[\s-]?sold|highest[\s-]?sell\w*|fast[\s-]?moving|popular|trending|season\w*|seson\w*|festiv\w*|festivel|holiday\w*|christmas|xmas|diwali|avurudu|ramadan|eid|new[\s-]?year|combo\w*|bundl\w*|cross[\s-]?sell|upsell)\b",
         {"sales_goods_issue_note_lines", "sales_goods_issue_notes", "inventory_items"},
         ("sales_", "inventory_", "core_"),
     ),

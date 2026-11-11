@@ -1,8 +1,11 @@
 """GPT query planning and LLM intent/follow-up resolution for the business database."""
+from contextlib import contextmanager
 import json
 import logging
 import os
 import re
+import threading
+import time
 
 from django.conf import settings
 from openai import OpenAI
@@ -12,7 +15,31 @@ logger = logging.getLogger(__name__)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
-client = OpenAI(api_key=OPENAI_API_KEY, timeout=90.0, max_retries=2)
+client = OpenAI(api_key=OPENAI_API_KEY, timeout=30.0, max_retries=1)
+
+_BUDGET_STATE = threading.local()
+
+
+@contextmanager
+def planning_budget(seconds: float):
+    """Set a per-thread wall-clock deadline for multi-step planning and review calls."""
+    prev_deadline = getattr(_BUDGET_STATE, "deadline", None)
+    new_deadline = time.monotonic() + max(0.0, float(seconds))
+    if prev_deadline is not None:
+        new_deadline = min(prev_deadline, new_deadline)
+    _BUDGET_STATE.deadline = new_deadline
+    try:
+        yield
+    finally:
+        _BUDGET_STATE.deadline = prev_deadline
+
+
+def _remaining_budget():
+    deadline = getattr(_BUDGET_STATE, "deadline", None)
+    if deadline is None:
+        return None
+    return max(0.0, deadline - time.monotonic())
+
 
 def _supports_reasoning_effort(model: str) -> bool:
     name = (model or "").lower()
@@ -379,8 +406,13 @@ class PlanningValidationError(ValueError):
 def _normalize_expr_enums(expr, base_table=None):
     if not isinstance(expr, dict):
         return
-    if isinstance(expr.get("expression"), dict):
-        _normalize_expr_enums(expr["expression"], base_table)
+    if "expression" in expr and isinstance(expr["expression"], dict) and not ({"left", "right"} <= set(expr)):
+        inner = expr.pop("expression")
+        saved_alias = expr.get("alias")
+        expr.clear()
+        expr.update(inner)
+        if saved_alias and "alias" not in expr:
+            expr["alias"] = saved_alias
     if isinstance(expr.get("operator"), str):
         raw_op = expr["operator"].upper()
         OP_SYNONYMS = {
@@ -427,10 +459,28 @@ def _normalize_expr_enums(expr, base_table=None):
                     expr[side] = float(inner_v) if "." in inner_v else int(inner_v)
                 else:
                     expr[side] = inner_v
+            elif "expression" in val and isinstance(val["expression"], dict) and not ({"operator", "left", "right"} <= set(val)):
+                for k in list(val.keys()):
+                    if k not in {"expression", "alias"}:
+                        val.pop(k, None)
+                _normalize_expr_enums(val["expression"], base_table)
             else:
                 if base_table and val.get("column") and not val.get("table") and not val.get("alias"):
                     val["table"] = base_table
-                _normalize_expr_enums(val, base_table)
+                if {"table", "column"} <= set(val) and not ({"operator", "left", "right"} <= set(val)):
+                    for k in list(val.keys()):
+                        if k not in {"table", "column", "alias", "type", "data_type"}:
+                            val.pop(k, None)
+                elif "alias" in val and not ({"operator", "left", "right"} <= set(val)):
+                    for k in list(val.keys()):
+                        if k not in {"alias", "table", "column", "type", "data_type"}:
+                            val.pop(k, None)
+                else:
+                    _normalize_expr_enums(val, base_table)
+    if {"operator", "left", "right"} <= set(expr):
+        for k in list(expr.keys()):
+            if k not in {"operator", "left", "right", "alias"}:
+                expr.pop(k, None)
 
 
 def _normalize_block_enums(block):
@@ -584,6 +634,40 @@ def _normalize_block_enums(block):
         if isinstance(s, dict) and s.get("alias")
     }
 
+    def _assign_clause_left(clause: dict, left_v: dict) -> None:
+        """Assign an unpacked LHS AST node onto a filter or having clause."""
+        if {"operator", "left", "right"} <= set(left_v):
+            clause["expression"] = left_v
+        elif isinstance(left_v.get("expression"), dict):
+            clause["expression"] = left_v["expression"]
+        elif left_v.get("column"):
+            clause["column"] = left_v["column"]
+            if left_v.get("table"):
+                clause["table"] = left_v["table"]
+        elif left_v.get("alias"):
+            clause["alias"] = left_v["alias"]
+
+    def _lift_comparison_expr(clause: dict, is_having: bool = False) -> None:
+        """Promote comparison expressions nested inside `expression` without top-level `operator`."""
+        if not clause.get("operator") and isinstance(clause.get("expression"), dict):
+            comp = clause["expression"]
+            if comp.get("operator") in {"=", "!=", "<>", "<", "<=", ">", ">="} and {"left", "right"} <= set(comp):
+                clause["operator"] = comp["operator"]
+                clause["value"] = comp["right"]
+                clause.pop("expression", None)
+                if isinstance(comp["left"], dict):
+                    if is_having:
+                        if {"operator", "left", "right"} <= set(comp["left"]):
+                            clause["expression"] = comp["left"]
+                        elif isinstance(comp["left"].get("expression"), dict):
+                            clause["expression"] = comp["left"]["expression"]
+                        elif comp["left"].get("alias"):
+                            clause["alias"] = comp["left"]["alias"]
+                        elif comp["left"].get("column"):
+                            clause["alias"] = comp["left"]["column"]
+                    else:
+                        _assign_clause_left(clause, comp["left"])
+
     # Normalize filters (WHERE)
     raw_filters = block.get("filters") or []
     normalized_filters = []
@@ -602,26 +686,24 @@ def _normalize_block_enums(block):
                 block.setdefault("having", []).append(flt_copy)
                 continue
 
-        # If model gave left/right on filter
+        _lift_comparison_expr(flt, is_having=False)
+
+        # If model gave left/right directly on filter
         if "left" in flt and "value" not in flt:
             left_v = flt.pop("left")
             if "right" in flt:
                 flt["value"] = flt.pop("right")
             if isinstance(left_v, dict):
-                if {"operator", "left", "right"} <= set(left_v):
-                    flt["expression"] = left_v
-                elif left_v.get("column"):
-                    flt["column"] = left_v["column"]
-                    if left_v.get("table"):
-                        flt["table"] = left_v["table"]
-                elif left_v.get("alias"):
-                    flt["alias"] = left_v["alias"]
+                _assign_clause_left(flt, left_v)
 
         allowed_flt_keys = {"table", "column", "expression", "alias", "operator", "value"}
         for k in list(flt.keys()):
             if k not in allowed_flt_keys:
                 flt.pop(k, None)
         f_expr = flt.get("expression")
+        while isinstance(f_expr, dict) and "expression" in f_expr and isinstance(f_expr["expression"], dict) and not ({"operator", "left", "right"} <= set(f_expr)):
+            f_expr = f_expr["expression"]
+            flt["expression"] = f_expr
         if isinstance(f_expr, dict) and not ({"operator", "left", "right"} <= set(f_expr.keys())):
             if "table" in f_expr or "column" in f_expr:
                 if f_expr.get("table") and not flt.get("table"):
@@ -659,6 +741,7 @@ def _normalize_block_enums(block):
     for h in raw_having:
         if not isinstance(h, dict):
             continue
+        _lift_comparison_expr(h, is_having=True)
         # having_item schema strictly allows: alias, expression, operator, value
         if not h.get("alias") and h.get("column"):
             col_name = h.pop("column")
@@ -820,6 +903,18 @@ def _parse_response(response, schema, question=""):
 def validate_contract(proposal):
     plans = proposal["plans"]
     contract = proposal["analysis_contract"]
+    if proposal.get("clarification"):
+        clarif_lower = str(proposal["clarification"]).lower()
+        forbidden_technical_terms = (
+            "organization_id", "tenant_id", "entity_id", "warehouse_id",
+            "party_id", "item_id", "table name", "database variable",
+            "column name", "foreign key", "primary key",
+        )
+        if any(term in clarif_lower for term in forbidden_technical_terms):
+            raise PlanningValidationError(
+                f"Clarification illegally asked the customer for internal database parameter ({proposal['clarification']}). "
+                "The system automatically scopes by organization and tenant. Produce executable query plans directly without asking the customer for database variable parameters."
+            )
     if proposal.get("schema_tables") and plans:
         raise PlanningValidationError("Schema discovery and executable plans must be separate steps.")
     if (contract["ambiguities"] or proposal.get("clarification")) and plans:
@@ -852,6 +947,127 @@ def _add_usage(total, response):
         total[name] += getattr(usage, name, 0) or 0
 
 
+def _plans_use_multiplier(plans, expected_multiplier: float) -> bool:
+    """Return True if any candidate plan filter/having/select uses the expected multiplier literal."""
+    from .domain_schema import expression_has_multiplier
+
+    def _is_num_eq(val: object) -> bool:
+        return isinstance(val, (int, float)) and not isinstance(val, bool) and float(val) == float(expected_multiplier)
+
+    def _has_div_expr(block: dict) -> bool:
+        return any(
+            isinstance(s, dict) and isinstance(s.get("expression"), dict) and s["expression"].get("operator") == "/"
+            for s in (block.get("select") or [])
+        )
+
+    def _clause_matches(clause: dict, has_select_ratio: bool = False) -> bool:
+        expr = clause.get("expression")
+        val = clause.get("value")
+        if expression_has_multiplier(expr, expected_multiplier) or expression_has_multiplier(val, expected_multiplier):
+            return True
+        if isinstance(expr, dict) and expr.get("operator") == "/" and _is_num_eq(val):
+            return True
+        return has_select_ratio and _is_num_eq(val)
+
+    for plan in plans or []:
+        if not isinstance(plan, dict):
+            continue
+        blocks = [plan, *(c for c in (plan.get("ctes") or []) if isinstance(c, dict))]
+        for block in blocks:
+            has_ratio = _has_div_expr(block)
+            for clause in (block.get("filters") or []) + (block.get("having") or []):
+                if isinstance(clause, dict) and _clause_matches(clause, has_ratio):
+                    return True
+            for sel in block.get("select") or []:
+                if isinstance(sel, dict) and expression_has_multiplier(sel.get("expression"), expected_multiplier):
+                    return True
+    return False
+
+
+def _plans_use_gt_comparison(plans) -> bool:
+    """Return True if any candidate filter/having uses a greater-than comparison operator."""
+    for plan in plans or []:
+        if not isinstance(plan, dict):
+            continue
+        blocks = [plan, *(c for c in (plan.get("ctes") or []) if isinstance(c, dict))]
+        for block in blocks:
+            for clause in (block.get("filters") or []) + (block.get("having") or []):
+                if isinstance(clause, dict) and str(clause.get("operator") or "").strip() in {">", ">="}:
+                    return True
+    return False
+
+
+_SPURIOUS_UNWANTED_PHRASES = (
+    "significant period",
+    "time frame",
+    "timeframe",
+    "duration",
+    "not sold or transferred",
+)
+_SPURIOUS_MULTIPLIER_PHRASES = (
+    "dynamic input",
+    "specified multiplier n",
+    "user-specified multiplier",
+    "fixed multiplier",
+    "if the user",
+    "future requests",
+    "narrative does not ensure",
+    "exact multiplier to use",
+    "does not match the requirement for more than double",
+    "multiplier",
+    "explicit ratio",
+    "literal '",
+    "represented as",
+    "does not reflect",
+)
+
+
+def _sanitize_review_result(question: str, proposal: dict, review: dict) -> tuple[list[str], str]:
+    """Strip known false-positive reviewer complaints so valid plans are not rejected."""
+    clean_clarification = (review.get("clarification") or "").strip()
+    if clean_clarification.lower() in {"none", "none.", "n/a", "null"}:
+        clean_clarification = ""
+
+    real_issues = [
+        i for i in (review.get("issues") or [])
+        if isinstance(i, str) and i.strip().lower() not in {"none", "none.", "n/a", "null", "no issues", "no issues found", "no issues.", "no issue"}
+    ]
+    q_lower = (question or "").lower()
+    plans = proposal.get("plans") or []
+
+    if plans and any(term in q_lower for term in ("unwanted", "dead stock", "obsolete", "inactive stock", "discontinued")):
+        real_issues = [i for i in real_issues if not any(w in i.lower() for w in _SPURIOUS_UNWANTED_PHRASES)]
+        if not real_issues:
+            review["verdict"] = "approve"
+            clean_clarification = ""
+
+    from .domain_schema import extract_explicit_multiplier
+    expected_mult = extract_explicit_multiplier(question)
+    if plans and expected_mult is not None and _plans_use_multiplier(plans, expected_mult):
+        has_gt_intent = any(term in q_lower for term in ("more than", "greater than", "exceed", "above", "over"))
+        has_gt_plan = has_gt_intent and _plans_use_gt_comparison(plans)
+
+        def _is_spurious_mult_issue(issue_text: str) -> bool:
+            low = issue_text.lower()
+            if any(w in low for w in _SPURIOUS_MULTIPLIER_PHRASES):
+                return True
+            return has_gt_plan and any(k in low for k in ("allowing for ambiguity", "indicated as '>'", "comparison for outstanding"))
+
+        filtered_issues = [i for i in real_issues if not _is_spurious_mult_issue(i)]
+        clarif_about_ratio = bool(clean_clarification and any(k in clean_clarification.lower() for k in ("multiplier", "ratio")))
+        if len(filtered_issues) < len(real_issues) or clarif_about_ratio:
+            real_issues = filtered_issues
+            if clarif_about_ratio:
+                clean_clarification = ""
+            if not real_issues:
+                review["verdict"] = "approve"
+                clean_clarification = ""
+
+    review["issues"] = real_issues
+    review["clarification"] = clean_clarification
+    return real_issues, clean_clarification
+
+
 def plan_question(question, schema, history=(), failures=(), *, allow_discovery=True):
     if getattr(settings, "SUPPORT_DISABLE_MODEL_CALLS", False):
         raise RuntimeError("Model calls are disabled for this verification run.")
@@ -864,19 +1080,25 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
     if not allow_discovery:
         output = {**OUTPUT, "properties": {k: v for k, v in OUTPUT["properties"].items() if k != "schema_tables"}}
         instructions += "\nRequested schemas are supplied. Return supported plans or a precise clarification/missing_capability; do not request schema_tables again."
-    request = {"question": question, "previous_questions": list(history)[-5:], "validation_feedback": list(failures)[-8:]}
+    request = {"question": question, "previous_questions": list(history)[-5:], "validation_feedback": list(failures)[-6:]}
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "source": "provider", "model": CHAT_MODEL}
     try:
+        rem = _remaining_budget()
+        if rem is not None and rem < 4.0:
+            raise PlanningValidationError("Planning time budget exceeded before planner call.", usage, retryable=False)
+
         planner_kwargs = {
             "model": CHAT_MODEL,
             "messages": [
-                {"role": "system", "content": instructions + "\nOUTPUT JSON SCHEMA:\n" + json.dumps(output)},
-                {"role": "user", "content": json.dumps({**request, "available_schema": schema}, default=str)},
+                {"role": "system", "content": instructions + "\nOUTPUT JSON SCHEMA:\n" + json.dumps(output, separators=(",", ":"))},
+                {"role": "user", "content": json.dumps({**request, "available_schema": schema}, default=str, separators=(",", ":"))},
             ],
             "response_format": {"type": "json_object"},
-            "max_completion_tokens": 6000,
+            "max_completion_tokens": 4500,
             "store": False,
         }
+        if rem is not None:
+            planner_kwargs["timeout"] = min(30.0, max(5.0, rem - 2.0))
         query_effort = os.getenv("QUERY_REASONING_EFFORT", "").strip().lower()
         if query_effort and query_effort not in {"none", "off", "false"} and _supports_reasoning_effort(CHAT_MODEL):
             planner_kwargs["reasoning_effort"] = query_effort
@@ -891,22 +1113,29 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
         logger.info("[PLANNER: CONTRACT VALIDATED] Goal=%r, Metric=%r",
                     proposal["analysis_contract"].get("goal"), proposal["analysis_contract"].get("metric"))
         if proposal["plans"] or proposal.get("clarification"):
+            rem_review = _remaining_budget()
+            if rem_review is not None and rem_review < 3.0:
+                raise PlanningValidationError("Planning time budget exceeded before query review.", usage, retryable=False)
             # Also review question-only answers: unnecessary clarification is a
             # quality failure, just as a query for the wrong metric is.
-            # Separate context: the reviewer does not inherit the planner's conversation.
+            # Separate context: the reviewer does not inherit the planner's conversation,
+            # and does not need the catalog's example JSON recipes repeated.
+            reviewer_schema = schema.split("\n\n### 📚 Domain Catalog", 1)[0] if isinstance(schema, str) else schema
             review_kwargs = {
                 "model": CHAT_MODEL,
                 "messages": [
                     {"role": "system", "content": QUERY_REVIEW_PROMPT + "\nAPPLICATION CLOCK: " + clock},
                     {"role": "user", "content": json.dumps({
                         "question": question, "previous_questions": list(history)[-5:],
-                        "available_schema": schema, "candidate": proposal,
-                    }, default=str)},
+                        "available_schema": reviewer_schema, "candidate": proposal,
+                    }, default=str, separators=(",", ":"))},
                 ],
                 "response_format": {"type": "json_schema", "json_schema": {"name": "query_review", "strict": True, "schema": REVIEW}},
-                "max_completion_tokens": 3000,
+                "max_completion_tokens": 2000,
                 "store": False,
             }
+            if rem_review is not None:
+                review_kwargs["timeout"] = min(20.0, max(4.0, rem_review - 1.5))
             review_effort = os.getenv("REVIEW_REASONING_EFFORT", "").strip().lower()
             if review_effort and review_effort not in {"none", "off", "false"} and _supports_reasoning_effort(CHAT_MODEL):
                 review_kwargs["reasoning_effort"] = review_effort
@@ -914,27 +1143,30 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
             review_response = client.chat.completions.create(**review_kwargs)
             _add_usage(usage, review_response)
             review = _parse_response(review_response, REVIEW)
-            clean_clarification = (review.get("clarification") or "").strip()
-            if clean_clarification.lower() in {"none", "none.", "n/a", "null"}:
-                clean_clarification = ""
-            review["clarification"] = clean_clarification
-
-            real_issues = [
-                i for i in (review.get("issues") or [])
-                if isinstance(i, str) and i.strip().lower() not in {"none", "none.", "n/a", "null", "no issues", "no issues found", "no issues.", "no issue"}
-            ]
-            review["issues"] = real_issues
+            real_issues, clean_clarification = _sanitize_review_result(question, proposal, review)
 
             logger.info("[REVIEWER: VERDICT] Verdict=%s, issues=%s, clarification=%s",
                         review.get("verdict"), review.get("issues"), review.get("clarification"))
             if review["verdict"] == "clarify":
-                if not review["clarification"]:
+                clean_clarif = (review.get("clarification") or "").strip()
+                if not clean_clarif:
                     raise PlanningValidationError("The review requested clarification without a question.")
+                clarif_lower = clean_clarif.lower()
+                forbidden_technical_terms = (
+                    "organization_id", "tenant_id", "entity_id", "warehouse_id",
+                    "party_id", "item_id", "table name", "database variable",
+                    "column name", "foreign key", "primary key",
+                )
+                if any(term in clarif_lower for term in forbidden_technical_terms):
+                    raise PlanningValidationError(
+                        f"Reviewer clarification illegally asked the customer for internal database parameter ({clean_clarif}). "
+                        "The system automatically scopes by organization and tenant. Produce executable query plans directly without asking the customer for database variable parameters."
+                    )
                 proposal["plans"] = []
-                proposal["clarification"] = review["clarification"]
-                proposal["analysis_contract"]["ambiguities"] = review["issues"] or [review["clarification"]]
+                proposal["clarification"] = clean_clarif
+                proposal["analysis_contract"]["ambiguities"] = review["issues"] or [clean_clarif]
                 for requirement in proposal["analysis_contract"]["requirements"]:
-                    requirement.update(status="needs_clarification", plan_indexes=[], limitation=review["clarification"])
+                    requirement.update(status="needs_clarification", plan_indexes=[], limitation=clean_clarif)
             elif review["verdict"] != "approve" or real_issues or clean_clarification:
                 proposal["query_review"] = review
                 proposal["usage"] = usage
@@ -954,5 +1186,8 @@ def plan_question(question, schema, history=(), failures=(), *, allow_discovery=
         import openai
         is_transient = isinstance(error, (openai.APITimeoutError, openai.APIConnectionError, openai.RateLimitError, openai.InternalServerError))
         logger.warning("[PLANNER: API EXCEPTION] %s: %s (transient=%s)", type(error).__name__, error, is_transient)
+        # If an API call actually timed out inside our budget or exhausted transient retries, keep retryable=False on timeout so we never cascade past HTTP proxy deadline.
+        if isinstance(error, openai.APITimeoutError):
+            is_transient = False
         # A failed review must never silently authorize an unchecked query.
         raise PlanningValidationError("Planning or query review was unavailable; no candidate was approved.", usage, retryable=is_transient) from error

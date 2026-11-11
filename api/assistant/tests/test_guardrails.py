@@ -93,6 +93,16 @@ class GuardrailsTestCase(SimpleTestCase):
             "why are you showing these records",
             "why did you return that list",
             "how do you find demand",
+            "why you find this as unwanted",
+            "why did you find this as unwanted",
+            "why is this unwanted",
+            "why is this considered unwanted",
+            "why you consider this unwanted",
+            "what makes this unwanted",
+            "why did you pick this",
+            "why this item",
+            "why is this inactive",
+            "why was this included",
         ]
         for q in why_queries:
             with self.subTest(query=q):

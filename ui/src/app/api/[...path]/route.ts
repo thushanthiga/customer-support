@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export const maxDuration = 120;
+export const maxDuration = 180;
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
@@ -64,7 +64,7 @@ async function handleProxy(request: NextRequest, path: string[]) {
       headers,
       body,
       cache: "no-store",
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(150000),
     });
 
     const responseData = await res.arrayBuffer();
@@ -74,11 +74,16 @@ async function handleProxy(request: NextRequest, path: string[]) {
       headers: res.headers,
     });
   } catch (err: any) {
-    console.error(`[Apptimate Proxy Error] Failed to proxy ${request.method} ${targetUrl}:`, err);
-    return NextResponse.json(
-      { error: `The support server could not complete this request: ${err.message}` },
-      { status: 502 }
-    );
+    const isTimeout = err?.name === "TimeoutError" || err?.code === 23;
+    const isUnreachable = err?.cause?.code === "ECONNREFUSED" || err?.message?.includes("fetch failed");
+    const status = isTimeout ? 504 : isUnreachable ? 503 : 502;
+    const message = isTimeout
+      ? "The support server took too long to answer this request. Please narrow your question or retry."
+      : isUnreachable
+        ? "Cannot reach the support server. Ensure the backend service is running and try again."
+        : `The support server could not complete this request: ${err?.message || "Unknown error"}`;
+    console.error(`[Apptimate Proxy Error] Failed to proxy ${request.method} ${targetUrl} (${status}):`, err);
+    return NextResponse.json({ error: message }, { status });
   }
 }
 

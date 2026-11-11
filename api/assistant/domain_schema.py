@@ -153,7 +153,7 @@ SEMANTIC_CONCEPT_GUIDE = """AUTHORITATIVE ERP BUSINESS ENTITY & SCHEMA CONCEPTS:
   * Comparing supplier total outstanding balance vs latest invoice: Use `ctes`!
     - Define CTE for supplier balances (e.g. `cte_balances`: base `finance_invoices`, select `party_id`, `SUM(GREATEST(amount_due - amount_settled, 0)) AS outstanding_balance`, filter `type='ap'` and `status != 'voided'`, group by `party_id`).
     - Define CTE for latest invoice (e.g. `cte_latest`: base `finance_invoices`, select `party_id`, `invoice_number`, `invoice_date`, `amount_due AS latest_invoice_amount`, window `ROW_NUMBER() OVER (PARTITION BY party_id ORDER BY invoice_date DESC, id DESC) AS rn`, filter `type='ap'` and `status != 'voided'`).
-    - Outer query: base `core_parties` INNER JOIN `cte_balances` ON `core_parties.id = cte_balances.party_id` INNER JOIN `cte_latest` ON `core_parties.id = cte_latest.party_id`, filter `cte_latest.rn = 1` and `cte_balances.outstanding_balance > 2 * cte_latest.latest_invoice_amount`.
+    - Outer query: base `core_parties` INNER JOIN `cte_balances` ON `core_parties.id = cte_balances.party_id` INNER JOIN `cte_latest` ON `core_parties.id = cte_latest.party_id`, filter `cte_latest.rn = 1` and `cte_balances.outstanding_balance > N * cte_latest.latest_invoice_amount` (CRITICAL: Replace N with the exact multiplier specified in the user request, e.g. 4000 for '4000 times', 2 for 'double'/'twice', 10 for '10 times', etc. NEVER default to 2 if the user specified a different multiplier!).
   * Do NOT query `procurement_supplier_bills` for tenant bills; all operational bills/invoices reside in `finance_invoices`.
 - Product Demand, Sales Velocity & Purchase Frequency:
   * In retail and ERP operations, demand means items that sell frequently over time (sales velocity & purchase frequency analysis — items customers repeatedly purchase in the shop, fast-moving products that attract customers, or seasonal demand surges like December/Christmas).
@@ -176,6 +176,12 @@ SEMANTIC_CONCEPT_GUIDE = """AUTHORITATIVE ERP BUSINESS ENTITY & SCHEMA CONCEPTS:
   * When comparing item stock < minimum (`min_stock_level`), use `inventory_items` joined with `INNER JOIN inventory_item_replenishment_rules` (`min_stock_level > 0`) and `LEFT JOIN inventory_stock_balances`, selecting `COALESCE(SUM(inventory_stock_balances.qty_available), 0) AS stock_quantity` and filtering `HAVING stock_quantity < min_stock_level`.
 - Unsold Catalog Items:
   * Base table `inventory_items` LEFT JOIN `sales_order_lines` ON `sales_order_lines.item_id = inventory_items.id` WHERE `sales_order_lines.id IS NULL` and `inventory_items.status = 'active'`.
+- Unwanted Stock, Obsolete Stock & Dead Stock:
+  * In this ERP system, unwanted or dead inventory refers to catalog items marked with non-operational statuses in the Item Master.
+  * Primary query: Base table `inventory_items` with filter `deleted_at IS NULL` and `status IN ('inactive', 'discontinued')` (or `status != 'active'`).
+  * Can optionally LEFT JOIN `inventory_stock_balances` on `item_id = inventory_items.id` to show warehouse stock levels.
+  * Select `id AS item_id`, `sku AS item_sku`, `name AS item_name`, `status AS item_status`.
+  * Never block or reject unwanted stock queries for clarification on time frames or duration.
 """
 
 # 4. CONCEPT EXPANSION KEYWORDS FOR SMART TABLE RETRIEVAL
@@ -210,6 +216,11 @@ CONCEPT_KEYWORD_EXPANSIONS = {
     "immedielty": ["balances", "items", "replenishment", "rules", "stock", "sales"],
     "immediately": ["balances", "items", "replenishment", "rules", "stock", "sales"],
     "things": ["items", "balances", "sales"],
+    # Unwanted, Obsolete & Dead Stock
+    "unwanted": ["items", "status", "balances", "stock", "warehouses"],
+    "stokes": ["items", "balances", "stock", "warehouses"],
+    "obsolete": ["items", "status", "balances", "stock", "warehouses"],
+    "dead": ["items", "status", "balances", "stock", "warehouses"],
     # Payments & Settlements
     "payment": ["invoices", "payments", "settled", "amount", "party"],
     "payments": ["invoices", "payments", "settled", "amount", "party"],
@@ -266,6 +277,91 @@ TABLE_TYPOS = {
     "procurement_purchase_order_line": "procurement_purchase_order_lines",
     "procurement_goods_receipt_note_line": "procurement_goods_receipt_note_lines",
 }
+
+
+def _parse_number_token(num_str: str):
+    clean = (num_str or "").replace(",", "").strip()
+    if not clean:
+        return None
+    try:
+        return float(clean) if "." in clean else int(clean)
+    except ValueError:
+        return None
+
+
+def extract_explicit_multiplier(question: str):
+    """Extract an explicitly stated ratio multiplier (e.g. 'double' -> 2, '4000 times' -> 4000), or None."""
+    if not question:
+        return None
+    q_lower = question.lower()
+    m = re.search(r"(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:times|x\b|\*)", q_lower)
+    if m:
+        parsed = _parse_number_token(m.group(1))
+        if parsed is not None:
+            return parsed
+    m_star = re.search(r"\*\s*(\d+(?:,\d+)*(?:\.\d+)?)", q_lower)
+    if m_star:
+        parsed = _parse_number_token(m_star.group(1))
+        if parsed is not None:
+            return parsed
+    for phrase, val in (
+        ("double", 2), ("twice", 2), ("two times", 2),
+        ("triple", 3), ("thrice", 3), ("three times", 3),
+        ("quadruple", 4), ("four times", 4),
+        ("quintuple", 5), ("five times", 5),
+        ("ten times", 10),
+    ):
+        if re.search(r"\b" + re.escape(phrase) + r"\b", q_lower):
+            return val
+    return None
+
+
+def extract_ratio_multiplier(question: str, default: float = 2.0) -> float:
+    """Extract numeric multiplier or ratio from comparative user queries."""
+    explicit = extract_explicit_multiplier(question)
+    if explicit is not None:
+        return explicit
+    if question:
+        m_comp = re.search(
+            r"\b(?:exceeds|more than|greater than|at least)\s+(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:of|the)\b",
+            question.lower(),
+        )
+        if m_comp:
+            parsed = _parse_number_token(m_comp.group(1))
+            if parsed is not None:
+                return parsed
+    return default
+
+
+def expression_has_multiplier(expr: Any, target_multiplier: float) -> bool:
+    """Return True if an expression tree multiplies by the target numeric literal."""
+    if not isinstance(expr, dict):
+        return False
+    if expr.get("operator") == "*":
+        for side, other in (("left", "right"), ("right", "left")):
+            val = expr.get(side)
+            if isinstance(val, (int, float)) and not isinstance(expr.get(other), (int, float)):
+                if float(val) == float(target_multiplier):
+                    return True
+    return any(isinstance(expr.get(k), dict) and expression_has_multiplier(expr[k], target_multiplier) for k in ("left", "right", "expression"))
+
+
+def update_expression_multiplier(expr: Any, target_multiplier: float) -> bool:
+    """Recursively search and update a numeric multiplier in an arithmetic expression."""
+    if not isinstance(expr, dict):
+        return False
+    if expr.get("operator") == "*":
+        if isinstance(expr.get("left"), (int, float)) and not isinstance(expr.get("right"), (int, float)):
+            expr["left"] = target_multiplier
+            return True
+        elif isinstance(expr.get("right"), (int, float)) and not isinstance(expr.get("left"), (int, float)):
+            expr["right"] = target_multiplier
+            return True
+    for k in ("left", "right", "expression"):
+        if isinstance(expr.get(k), dict):
+            if update_expression_multiplier(expr[k], target_multiplier):
+                return True
+    return False
 
 
 def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
@@ -329,9 +425,10 @@ def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
             and ("balance" in q_lower or "outstanding" in q_lower)
             and ("latest" in q_lower or "recent" in q_lower or "last" in q_lower)
             and ("invoice" in q_lower or "bill" in q_lower)
-            and any(w in q_lower for w in ["double", "twice", "2 *", "2x", "two times", "greater than", "more than"])
+            and any(w in q_lower for w in ["double", "twice", "2 *", "2x", "two times", "greater than", "more than", "times", "x"])
         )
         if is_supplier_balance_vs_latest:
+            multiplier = extract_ratio_multiplier(question, default=2)
             has_balances_cte = any(
                 isinstance(c, dict) and c.get("name") in {"cte_balances", "supplier_balances", "balances"}
                 for c in (repaired.get("ctes") or [])
@@ -414,7 +511,7 @@ def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
                                 "right": {
                                     "expression": {
                                         "operator": "*",
-                                        "left": 2,
+                                        "left": multiplier,
                                         "right": {"table": "cte_latest", "column": "latest_invoice_amount"}
                                     }
                                 }
@@ -425,25 +522,39 @@ def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
                     ],
                     "order_by": [{"alias": "total_outstanding_balance", "direction": "desc"}]
                 }
+            else:
+                filter_updated = False
+                for flt in (repaired.get("filters") or []):
+                    if isinstance(flt, dict) and "expression" in flt:
+                        if update_expression_multiplier(flt["expression"], multiplier):
+                            filter_updated = True
+                            break
+                if not filter_updated:
+                    repaired.setdefault("filters", []).append({
+                        "expression": {
+                            "operator": "-",
+                            "left": {"table": "cte_balances", "column": "outstanding_balance"},
+                            "right": {
+                                "expression": {
+                                    "operator": "*",
+                                    "left": multiplier,
+                                    "right": {"table": "cte_latest", "column": "latest_invoice_amount"}
+                                }
+                            }
+                        },
+                        "operator": ">",
+                        "value": 0
+                    })
 
         # Customer total sales orders vs latest order comparison
         is_customer_sales_vs_latest = (
             ("customer" in q_lower or "client" in q_lower)
             and ("order" in q_lower or "sales" in q_lower)
             and ("latest" in q_lower or "recent" in q_lower or "last" in q_lower)
-            and any(w in q_lower for w in ["times", "greater than", "more than", "double", "triple", "3x", "2x"])
+            and any(w in q_lower for w in ["times", "greater than", "more than", "double", "triple", "3x", "2x", "x"])
         )
         if is_customer_sales_vs_latest:
-            multiplier = 3
-            if "double" in q_lower or "2" in q_lower or "twice" in q_lower:
-                multiplier = 2
-            elif "triple" in q_lower or "3" in q_lower or "three" in q_lower:
-                multiplier = 3
-            elif "4" in q_lower or "four" in q_lower:
-                multiplier = 4
-            elif "5" in q_lower or "five" in q_lower:
-                multiplier = 5
-
+            multiplier = extract_ratio_multiplier(question, default=3)
             has_totals_cte = any(
                 isinstance(c, dict) and c.get("name") in {"cte_totals", "customer_orders", "order_totals", "totals"}
                 for c in (repaired.get("ctes") or [])
@@ -529,6 +640,29 @@ def repair_and_heal_plan(plan: dict, schema: dict, question: str = "") -> dict:
                     ],
                     "order_by": [{"alias": "total_sales_value", "direction": "desc"}]
                 }
+            else:
+                filter_updated = False
+                for flt in (repaired.get("filters") or []):
+                    if isinstance(flt, dict) and "expression" in flt:
+                        if update_expression_multiplier(flt["expression"], multiplier):
+                            filter_updated = True
+                            break
+                if not filter_updated:
+                    repaired.setdefault("filters", []).append({
+                        "expression": {
+                            "operator": "-",
+                            "left": {"table": "cte_totals", "column": "total_sales_value"},
+                            "right": {
+                                "expression": {
+                                    "operator": "*",
+                                    "left": multiplier,
+                                    "right": {"table": "cte_latest", "column": "latest_order_value"}
+                                }
+                            }
+                        },
+                        "operator": ">",
+                        "value": 0
+                    })
 
         # Inventory stock balance across warehouses vs open sales order demand comparison
         is_stock_vs_demand = (

@@ -462,6 +462,8 @@ def _relevant_tables(schema, question: str, limit: int = 20):
 
 def _format_schema_context(schema, selected):
     rows = ["Fully discovered tables (all columns are listed below): " + ", ".join(selected)]
+    selected_set = set(selected)
+    include_audit_edges = "core_users" in selected_set
     for table in selected:
         cols = [f"{column} ({data_type})" for column, data_type in schema["tables"][table].items()]
         deletion = "deleted_at" if "deleted_at" in schema["tables"][table] else "none (do not filter deleted_at)"
@@ -472,25 +474,53 @@ def _format_schema_context(schema, selected):
             if info.get("values")
         }
         if enum_columns:
-            rows.append("Database enum values for " + table + ": " + json.dumps(enum_columns))
+            rows.append("Database enum values for " + table + ": " + json.dumps(enum_columns, separators=(",", ":")))
         indexes = schema.get("indexes", {}).get(table, {})
         if indexes:
-            rows.append("Database indexes for " + table + ": " + json.dumps(indexes))
+            key_indexes = {
+                name: info
+                for name, info in indexes.items()
+                if name == "PRIMARY" or (isinstance(info, dict) and info.get("unique"))
+            }
+            if key_indexes:
+                rows.append("Database indexes for " + table + ": " + json.dumps(key_indexes, separators=(",", ":")))
     table_rank = {table: index for index, table in enumerate(selected)}
+    declared = schema.get("declared_relationships", set())
     ranked_edges = sorted(
         schema["relationships"],
-        key=lambda edge: (table_rank.get(edge[0], len(selected)) + table_rank.get(edge[2], len(selected)), edge),
+        key=lambda edge: (0 if edge in declared else 1, table_rank.get(edge[0], len(selected)) + table_rank.get(edge[2], len(selected)), edge),
     )
-    edges = [
-        f"{left}.{left_col} = {right}.{right_col} ("
-        + ("declared foreign key" if (left, left_col, right, right_col) in schema.get("declared_relationships", set())
-           else "inferred application relationship; cardinality and business meaning are not proven") + ")"
-        for left, left_col, right, right_col in ranked_edges
-        if left in selected and right in selected
-    ]
+    edges = []
+    for left, left_col, right, right_col in ranked_edges:
+        if left not in selected_set or right not in selected_set:
+            continue
+        if not include_audit_edges and left_col in {"created_by", "updated_by", "deleted_by"}:
+            continue
+        edges.append(
+            f"{left}.{left_col} = {right}.{right_col} ("
+            + ("declared foreign key" if (left, left_col, right, right_col) in declared
+               else "inferred application relationship; cardinality and business meaning are not proven") + ")"
+        )
+        if len(edges) >= 40:
+            break
     if edges:
         rows.append("Allowed join candidates (source labels matter): " + "; ".join(edges))
-    rows.append("Authorized business table catalogue (request schema_tables for additional details): " + ", ".join(sorted(schema["tables"])))
+    all_tables = sorted(schema["tables"])
+    if len(all_tables) <= 60:
+        catalogue = all_tables
+    else:
+        from .domain_schema import SYSTEM_TABLE_PREFIXES
+
+        selected_prefixes = tuple({t.split("_")[0] + "_" for t in selected if "_" in t})
+        core_prefixes = ("core_", "sales_", "procurement_", "inventory_", "finance_", "fin_")
+        candidates = [
+            t for t in all_tables
+            if t not in selected_set
+            and not any(t.startswith(p) for p in (*SYSTEM_TABLE_PREFIXES, "agent_chat_"))
+            and (t.startswith(selected_prefixes) or t.startswith(core_prefixes))
+        ]
+        catalogue = candidates[:50]
+    rows.append("Authorized business table catalogue (request schema_tables for additional details): " + ", ".join(catalogue))
     return "\n".join(rows)
 
 

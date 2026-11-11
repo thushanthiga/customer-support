@@ -109,14 +109,45 @@ def _matches_any(text: str, keywords: List[str]) -> bool:
     return False
 
 
+def _compact_module_section(content: str) -> str:
+    """Keep module headers, table names, and FK relationships while stripping redundant Markdown column tables."""
+    if not content:
+        return ""
+    # Strip verbose `**Physical Columns & Data Types**:` markdown tables because base_schema already supplies columns & types.
+    cleaned = re.sub(
+        r"\*\*Physical Columns & Data Types\*\*:\s*\n(?:\|[^\n]*\n)+",
+        "",
+        content,
+    )
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _compact_principles(header_content: str) -> str:
+    """Extract critical naming and scoping rules from Section 1 without repetitive boilerplate."""
+    if not header_content:
+        return ""
+    match = re.search(r"(### 1\.6 Critical Column Naming Standards[\s\S]*)", header_content)
+    return match.group(1).strip() if match else ""
+
+
 def get_catalog_slice(question: str) -> str:
-    """Return a targeted Markdown slice containing only the relevant tables and recipes for question."""
+    """Return a compact, high-signal Markdown slice of semantic rules, FKs, and canonical recipes."""
     sections = _parse_sections()
     if not sections:
         return ""
 
     q_lower = (question or "").lower()
     selected = []
+
+    principles = _compact_principles(sections.get("header", ""))
+    if principles:
+        selected.append(principles)
+
+    def _add_module(key: str) -> None:
+        compact = _compact_module_section(sections.get(key, ""))
+        if compact and compact not in selected:
+            selected.append(compact)
 
     # 1. Complex comparison keywords (CTE recipes)
     is_cte_comparison = any(term in q_lower for term in (
@@ -127,71 +158,55 @@ def get_catalog_slice(question: str) -> str:
     # 2. Domain matching
     # Finance / AP / Suppliers
     if _matches_any(q_lower, ["supplier", "vendor", "party", "bill", "invoice", "payable", "ap", "ar", "due"]):
-        if "finance" in sections:
-            selected.append(sections["finance"])
-        if "core" in sections and sections["core"] not in selected:
-            selected.append(sections["core"])
+        _add_module("finance")
+        _add_module("core")
         if is_cte_comparison and "recipe_cte_balance_latest" in sections:
             selected.append(sections["recipe_cte_balance_latest"])
 
     # Customers / Receivables / AR
     if _matches_any(q_lower, ["customer", "client", "debtor"]):
-        if "finance" in sections and sections["finance"] not in selected:
-            selected.append(sections["finance"])
-        if "core" in sections and sections["core"] not in selected:
-            selected.append(sections["core"])
+        _add_module("finance")
+        _add_module("core")
 
     # Inventory / Minimum / Replenishment / Stock
     if _matches_any(q_lower, ["stock", "inventory", "item", "product", "sku", "minimum", "min_stock", "replenish", "risk", "reorder"]):
-        if "inventory" in sections and sections["inventory"] not in selected:
-            selected.append(sections["inventory"])
+        _add_module("inventory")
         if _matches_any(q_lower, ["minimum", "min_stock", "replenish", "risk", "reorder", "lesser than", "threshold", "item master"]):
             if "recipe_min_stock" in sections:
                 selected.append(sections["recipe_min_stock"])
 
     # Sales / Demand / Restocking / Velocity
     if _matches_any(q_lower, ["demand", "selling", "popular", "fast moving", "bestseller", "restock", "seasonal", "velocity"]):
-        if "sales" in sections and sections["sales"] not in selected:
-            selected.append(sections["sales"])
-        if "inventory" in sections and sections["inventory"] not in selected:
-            selected.append(sections["inventory"])
+        _add_module("sales")
+        _add_module("inventory")
         if "recipe_demand_restock" in sections:
             selected.append(sections["recipe_demand_restock"])
 
     # Open demand / sales order backlog
     if _matches_any(q_lower, ["backlog", "unfulfilled", "open order", "open sales"]):
-        if "sales" in sections and sections["sales"] not in selected:
-            selected.append(sections["sales"])
+        _add_module("sales")
         if "recipe_stock_vs_demand" in sections:
             selected.append(sections["recipe_stock_vs_demand"])
 
     # Procurement / Purchasing
     if _matches_any(q_lower, ["purchase order", "po", "grn", "goods receipt", "procurement", "requisition", "rfq"]):
-        if "procurement" in sections:
-            selected.append(sections["procurement"])
-        if "core" in sections and sections["core"] not in selected:
-            selected.append(sections["core"])
+        _add_module("procurement")
+        _add_module("core")
 
     # Human Resources & Payroll
     if _matches_any(q_lower, ["employee", "staff", "payroll", "salary", "attendance", "leave", "ot", "overtime", "designation"]):
-        if "hr" in sections:
-            selected.append(sections["hr"])
-        if "core" in sections and sections["core"] not in selected:
-            selected.append(sections["core"])
+        _add_module("hr")
+        _add_module("core")
 
     # CRM & Pipeline
     if _matches_any(q_lower, ["lead", "crm", "pipeline", "opportunity", "quotation"]):
-        if "crm" in sections:
-            selected.append(sections["crm"])
-        if "sales" in sections and sections["sales"] not in selected:
-            selected.append(sections["sales"])
+        _add_module("crm")
+        _add_module("sales")
 
-    if not selected:
-        # Fallback for generic/open queries: include Core Entities + Inventory summary
-        if "inventory" in sections:
-            selected.append(sections["inventory"])
-        if "sales" in sections:
-            selected.append(sections["sales"])
+    if len(selected) <= (1 if principles else 0):
+        # Fallback for generic/open queries: include compact Inventory + Sales FKs
+        _add_module("inventory")
+        _add_module("sales")
 
     header_block = "### 📚 Domain Catalog & Verified Schema Rules\n"
     return header_block + "\n\n---\n\n".join(selected)

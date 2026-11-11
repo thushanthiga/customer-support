@@ -326,6 +326,7 @@ Evaluates whether hot-selling / high-velocity products have sufficient stock:
   "limit": 50
 }
 ```
+- **Multiplier Note**: Use literal `2` when the user says "double" or "twice", `3` for "triple", or the exact number N when "N times" is specified (e.g., `4000` for "4000 times"). Because words like "double" already specify an exact multiplier (`2`), never reject or ask for clarification on dynamic input.
 
 ---
 

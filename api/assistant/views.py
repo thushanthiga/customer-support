@@ -10,17 +10,20 @@ from django.contrib.auth.models import User
 from django.db.models import Max, Min
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from openai import APITimeoutError
 
 from .chunking_service import ensure_default_document_indexed, process_and_index_document
 from .db_service import get_tenant_connection, resolve_tenant_database
 from .erp_access import is_analytics_admin, principal_from_request, principal_scope
-from .local_engine import LocalAnswer
+from .local_engine import CLASSIFIER_MODEL, LocalAnswer
 from .models import ChatUsageLog, DocumentChunk, UploadedDocument
 from .query_service import query_business_data
 
 logger = logging.getLogger(__name__)
 
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
+
+_SESSION_STATE_CACHE: dict = {}
 
 
 @csrf_exempt
@@ -243,7 +246,26 @@ def chat_query(request):
             ChatUsageLog.objects.filter(user_id=username, session_id=session_id).order_by("-created_at")[:5]
         )
         state_key = "local_chat_" + session_id
-        state = request.session.get(state_key, {})
+        session_obj = getattr(request, "session", None)
+        state = (session_obj.get(state_key) if session_obj else None) or _SESSION_STATE_CACHE.get(session_id) or {}
+        if not state.get("last_audit"):
+            import re
+            for log in recent:
+                resp = log.bot_response or ""
+                sql_match = re.search(r"```sql\s*(SELECT[\s\S]+?)\s*```", resp, re.I)
+                if sql_match:
+                    clean_summary = resp.split("<details>")[0].strip() if "<details>" in resp else resp[:300]
+                    clean_summary = clean_summary.split("🔍 Technical Execution")[0].strip()
+                    state["last_audit"] = {
+                        "question": log.user_message,
+                        "compiled_sql": sql_match.group(1).strip(),
+                        "row_count": None,
+                        "retrieval_eval": {"retrieved_tables": [], "score": None},
+                        "query_eval": None,
+                        "analysis_contract": None,
+                        "summary": clean_summary,
+                    }
+                    break
         with principal_scope(principal):
             try:
                 payload = LocalAnswer(
@@ -263,7 +285,24 @@ def chat_query(request):
                     "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "source": "not_used"},
                     "evidence": [],
                 }
-        request.session[state_key] = state
+            except (TimeoutError, APITimeoutError) as error:
+                logger.warning("chat_query timed out for session_id=%s: %s", session_id, error)
+                payload = {
+                    "response": (
+                        "The request exceeded the processing time limit while analyzing ERP data. "
+                        "Please narrow the scope (for example, adding a date range or module) or try again."
+                    ),
+                    "answer_status": "lookup_failed",
+                    "confidence": 0.0,
+                    "confidence_type": "evidence",
+                    "confidence_basis": "Query processing stopped cleanly because the server request budget elapsed.",
+                    "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "source": "not_used"},
+                    "evidence": [],
+                }
+        if session_obj:
+            session_obj[state_key] = state
+            session_obj.modified = True
+        _SESSION_STATE_CACHE[session_id] = state
         usage = payload.get("usage", {})
         ChatUsageLog.objects.create(
             user_id=username,
@@ -424,6 +463,7 @@ def delete_session(request):
             return JsonResponse({"error": "session_id required"}, status=400)
 
         deleted, _ = ChatUsageLog.objects.filter(user_id=username, session_id=session_id).delete()
+        _SESSION_STATE_CACHE.pop(session_id, None)
         return JsonResponse({"message": f"Deleted {deleted} messages", "success": True})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -514,6 +554,7 @@ def erp_context(request):
         "authenticated": True,
         "erp_sign_in_required": False,
         "chat_model": CHAT_MODEL,
+        "classifier_model": CLASSIFIER_MODEL,
         "user": {
             "name": principal["name"],
             "user_id": principal["user_id"],
@@ -534,6 +575,7 @@ def bootstrap(request):
         "tenant": principal.get("tenant", tenant),
         "workspace": "Apptimate One",
         "chat_model": CHAT_MODEL,
+        "classifier_model": CLASSIFIER_MODEL,
         "classification_mode": "openai",
         "retention": {"hold_days": 1, "max_chats": 10},
     })
@@ -593,4 +635,5 @@ def delete_session_by_id(request, session_id):
     principal = principal_from_request(request, resolve_tenant_database(None))
     username = f"erp:{principal['tenant']}:{principal['user_id']}"
     ChatUsageLog.objects.filter(user_id=username, session_id=session_id).delete()
+    _SESSION_STATE_CACHE.pop(session_id, None)
     return JsonResponse({"ok": True, "success": True})

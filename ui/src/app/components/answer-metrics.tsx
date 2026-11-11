@@ -42,7 +42,7 @@ const sourceLabels = {
     text_count: "Counted tokens in the saved question and visible answer; these are not historical model billing counts",
     estimated_text: "Estimated tokens in the saved question and visible answer; these are not historical model billing counts",
 };
-const searchLabels: Record<string, string> = {database: "Database", document: "Documents / RAG", hybrid: "Database + documents", general: "General", clarification: "Clarification", none: "No source read", unknown: "Not retained"};
+const searchLabels: Record<string, string> = {database: "Database", database_explanation: "Database explanation", advisory: "Business Advisory", document: "Documents / RAG", hybrid: "Database + documents", general: "General", clarification: "Clarification", none: "No source read", unknown: "Not retained"};
 const confidenceLabels: Record<string, string> = {evidence: "Source evidence", source_grounding: "Claim-to-source support", item_match: "Item match", verified_rule: "Verified rule", model: "Help relevance"};
 
 export default function AnswerMetrics({ metrics }: { metrics?: ResponseMetrics }) {
